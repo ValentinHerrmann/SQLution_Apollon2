@@ -98,7 +98,7 @@ export function Class({
   )
 
   useEffect(() => {
-    if (height && height <= minHeight) {
+    if (!height || height !== minHeight) {
       setNodes((prev) =>
         prev.map((node) => {
           if (node.id === id) {
@@ -134,14 +134,15 @@ export function Class({
         })
       )
     }
-  }, [id, setNodes, minWidth])
+  }, [id, setNodes, minWidth, width])
 
   const finalWidth = Math.max(width ?? 0, minWidth)
+  const finalHeight = minHeight
 
   return (
     <DefaultNodeWrapper
-      width={width}
-      height={height}
+      width={finalWidth}
+      height={finalHeight}
       elementId={id}
       className="horizontally-not-resizable"
     >
@@ -150,15 +151,15 @@ export function Class({
       <NodeResizer
         nodeId={id}
         isVisible={isDiagramModifiable && !!selected}
-        minWidth={minWidth}
-        minHeight={minHeight}
-        maxHeight={minHeight}
+        minWidth={finalWidth}
+        minHeight={finalHeight}
+        maxHeight={finalHeight}
         handleStyle={{ width: 8, height: 8 }}
       />
       <div ref={classSvgWrapperRef}>
         <ClassSVG
           width={finalWidth}
-          height={minHeight}
+          height={finalHeight}
           data={data}
           id={id}
           showAssessmentResults={!isDiagramModifiable}

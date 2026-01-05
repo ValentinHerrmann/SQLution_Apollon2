@@ -1,12 +1,7 @@
+import { useEffect } from "react"
 import { BrowserRouter, Route, Routes } from "react-router"
 import { AppProviders } from "./AppProviders"
-import { Navbar } from "./components"
-import {
-  ApollonLocal,
-  ApollonPlayground,
-  ApollonWithConnection,
-  ErrorPage,
-} from "@/pages"
+import { ApollonLocal } from "@/pages"
 import { SafeArea } from "capacitor-plugin-safe-area"
 import { ToastContainer } from "react-toastify"
 import { useShallow } from "zustand/shallow"
@@ -35,18 +30,34 @@ SafeArea.getSafeAreaInsets().then(
 )
 
 function App() {
-  const currentTheme = useThemeStore(useShallow((state) => state.currentTheme))
+  const { currentTheme, setTheme, setUserThemePreference } = useThemeStore(
+    useShallow((state) => ({
+      currentTheme: state.currentTheme,
+      setTheme: state.setTheme,
+      setUserThemePreference: state.setUserThemePreference,
+    }))
+  )
+
+  useEffect(() => {
+    setTheme("dark")
+    setUserThemePreference("dark")
+  }, [setTheme, setUserThemePreference])
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        background: "var(--apollon2-background)",
+      }}
+    >
       <BrowserRouter>
         <AppProviders>
-          <Navbar />
           <div style={{ flex: 1, overflow: "hidden" }}>
             <Routes>
               <Route path="/" element={<ApollonLocal />} />
-              <Route path="/playground" element={<ApollonPlayground />} />
-              <Route path="/:diagramId" element={<ApollonWithConnection />} />
-              <Route path="*" element={<ErrorPage />} />
+              <Route path="*" element={<ApollonLocal />} />
             </Routes>
           </div>
 

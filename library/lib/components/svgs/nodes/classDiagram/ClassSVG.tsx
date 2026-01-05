@@ -75,12 +75,14 @@ export const ClassSVG = ({
         itemHeight={headerHeight}
         yOffset={0}
       >
+        {/* Base rectangle with fill */}
         <StyledRect
           x={0}
           y={0}
           width={width}
           height={height}
           stroke={strokeColor}
+          fill={fillColor}
         />
 
         {/* Header Section */}
@@ -138,6 +140,17 @@ export const ClassSVG = ({
         {showAssessmentResults && (
           <AssessmentIcon score={nodeScore} x={width - 15} y={-15} />
         )}
+
+        {/* Stroke-only frame on top to keep outline visible */}
+        <StyledRect
+          x={0}
+          y={0}
+          width={width}
+          height={height}
+          stroke={strokeColor}
+          fill="none"
+          pointerEvents="none"
+        />
       </AssessmentSelectableElement>
     </svg>
   )

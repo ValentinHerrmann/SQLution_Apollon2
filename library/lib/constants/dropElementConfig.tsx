@@ -9,7 +9,6 @@ import {
   ActivityObjectNodeSVG,
   ActivitySVG,
   ClassSVG,
-  PackageSVG,
   UseCaseNodeSVG,
   UseCaseSystemNodeSVG,
   UseCaseActorNodeSVG,
@@ -43,7 +42,7 @@ import {
   ColorDescriptionSVG,
 } from "@/components"
 import { generateUUID } from "@/utils"
-import { ClassType, UMLDiagramType } from "@/types"
+import { UMLDiagramType } from "@/types"
 import { DiagramNodeType } from "@/nodes"
 import { ReachabilityGraphMarkingSVG } from "@/components/svgs/nodes/reachabilityGraphDiagram/ReachabilityGraphMarkingSVG"
 import {
@@ -71,60 +70,13 @@ export type DropElementConfig = {
 export const dropElementConfigs: Record<UMLDiagramType, DropElementConfig[]> = {
   [UMLDiagramType.ClassDiagram]: [
     {
-      type: "package",
-      width: droppedElementWidth,
-      height: 120,
-      defaultData: { name: "Package" },
-      svg: (props) => <PackageSVG {...props} />,
-    },
-    {
       type: "class",
       width: droppedElementWidth,
       height: 100,
       defaultData: {
-        name: "Class",
-        methods: [{ id: generateUUID(), name: "+ method()" }],
-        attributes: [{ id: generateUUID(), name: "+ attribute: Type" }],
-      },
-      svg: (props) => <ClassSVG {...props} />,
-    },
-    {
-      type: "class",
-      width: droppedElementWidth,
-      height: 110,
-      defaultData: {
-        name: "Abstract",
-        stereotype: ClassType.Abstract,
-        methods: [{ id: generateUUID(), name: "+ method()" }],
-        attributes: [{ id: generateUUID(), name: "+ attribute: Type" }],
-      },
-      svg: (props) => <ClassSVG {...props} />,
-    },
-    {
-      type: "class",
-      width: droppedElementWidth,
-      height: 140,
-      defaultData: {
-        name: "Enumeration",
-        stereotype: ClassType.Enumeration,
+        name: "Tabelle",
         methods: [],
-        attributes: [
-          { id: generateUUID(), name: "Case 1" },
-          { id: generateUUID(), name: "Case 2" },
-          { id: generateUUID(), name: "Case 3" },
-        ],
-      },
-      svg: (props) => <ClassSVG {...props} />,
-    },
-    {
-      type: "class",
-      width: droppedElementWidth,
-      height: 110,
-      defaultData: {
-        name: "Interface",
-        stereotype: ClassType.Interface,
-        methods: [{ id: generateUUID(), name: "+ method()" }],
-        attributes: [{ id: generateUUID(), name: "+ attribute: Type" }],
+        attributes: [{ id: generateUUID(), name: "Typ Spalte" }],
       },
       svg: (props) => <ClassSVG {...props} />,
     },

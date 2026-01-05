@@ -9,6 +9,7 @@ import { useMetadataStore } from "@/store/context"
 import { useShallow } from "zustand/shallow"
 import { DraggableGhost } from "./DraggableGhost"
 import { ZINDEX_DRAGGABLE_GHOST } from "@/constants/zindexConstants"
+import { UMLDiagramType } from "@/types"
 
 /* ========================================================================
    Sidebar Component
@@ -63,27 +64,31 @@ export const Sidebar = () => {
         </React.Fragment>
       ))}
 
-      <DividerLine style={{ margin: "3px 0" }} />
-      <DraggableGhost dropElementConfig={ColorDescriptionConfig}>
-        <div
-          className="prevent-select"
-          style={{
-            width: ColorDescriptionConfig.width * transformScale,
-            height: ColorDescriptionConfig.height * transformScale,
-            zIndex: ZINDEX_DRAGGABLE_GHOST,
-            marginTop: ColorDescriptionConfig.marginTop,
-          }}
-        >
-          {React.createElement(ColorDescriptionConfig.svg, {
-            width: ColorDescriptionConfig.width,
-            height: ColorDescriptionConfig.height,
-            ...ColorDescriptionConfig.defaultData,
-            data: ColorDescriptionConfig.defaultData,
-            transformScale,
-            id: "sidebarElement_ColorDescription",
-          })}
-        </div>
-      </DraggableGhost>
+      {diagramType !== UMLDiagramType.ClassDiagram && (
+        <>
+          <DividerLine style={{ margin: "3px 0" }} />
+          <DraggableGhost dropElementConfig={ColorDescriptionConfig}>
+            <div
+              className="prevent-select"
+              style={{
+                width: ColorDescriptionConfig.width * transformScale,
+                height: ColorDescriptionConfig.height * transformScale,
+                zIndex: ZINDEX_DRAGGABLE_GHOST,
+                marginTop: ColorDescriptionConfig.marginTop,
+              }}
+            >
+              {React.createElement(ColorDescriptionConfig.svg, {
+                width: ColorDescriptionConfig.width,
+                height: ColorDescriptionConfig.height,
+                ...ColorDescriptionConfig.defaultData,
+                data: ColorDescriptionConfig.defaultData,
+                transformScale,
+                id: "sidebarElement_ColorDescription",
+              })}
+            </div>
+          </DraggableGhost>
+        </>
+      )}
     </aside>
   )
 }

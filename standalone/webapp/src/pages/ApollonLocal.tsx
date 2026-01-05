@@ -5,6 +5,21 @@ import React, { useEffect, useRef } from "react"
 import { useLocation } from "react-router"
 import { log } from "@/logger"
 
+type Apollon2Bridge = {
+  editor: ApollonEditor
+  loadModel: (model: ApollonEditor["model"]) => void
+  model: () => ApollonEditor["model"]
+  exportSvg: () => Promise<Blob>
+}
+
+declare global {
+  interface Window {
+    apollon2?: Apollon2Bridge
+    apollon2Ready?: Promise<Apollon2Bridge>
+    _apollon2ReadyResolve?: (bridge: Apollon2Bridge) => void
+  }
+}
+
 export const ApollonLocal: React.FC = () => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const { setEditor } = useEditorContext()
@@ -38,6 +53,29 @@ export const ApollonLocal: React.FC = () => {
     })
 
     setEditor(instance)
+
+    const bridge: Apollon2Bridge = {
+      editor: instance,
+      loadModel: (model) => {
+        instance.model = model
+      },
+      model: () => instance.model,
+      exportSvg: async () => {
+        const { svg } = await instance.exportAsSVG()
+        return new Blob([svg], { type: "image/svg+xml" })
+      },
+    }
+
+    if (!window.apollon2Ready) {
+      window.apollon2Ready = new Promise((resolve) => {
+        window._apollon2ReadyResolve = resolve
+      })
+    }
+
+    window.apollon2 = bridge
+    window._apollon2ReadyResolve?.(bridge)
+    // Keep the global promise resolved for external consumers
+    window.apollon2Ready = Promise.resolve(bridge)
 
     return () => {
       log.debug("Cleaning up Apollon2 instance")
