@@ -1,13 +1,15 @@
-import { CustomText } from "@/components/svgs/nodes/CustomText"
+import { MultilineText } from "@/components"
+import { LAYOUT } from "@/constants"
 import { DefaultNodeProps } from "@/types"
 import { getCustomColorsFromData } from "@/utils"
+import { maxLinesForHeight } from "@/utils/svgTextLayout"
 import { SVGAttributes } from "react"
 
 export type ColorDescriptionSVGProps = {
   width: number
   height: number
   data: DefaultNodeProps
-  transformScale?: number
+  SIDEBAR_PREVIEW_SCALE?: number
   svgAttributes?: SVGAttributes<SVGElement>
 }
 
@@ -16,12 +18,12 @@ export function ColorDescriptionSVG({
   height,
   data,
   svgAttributes,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
 }: ColorDescriptionSVGProps) {
-  const strokeWidth = 0.5
+  const strokeWidth = LAYOUT.LINE_WIDTH
 
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
   const { name } = data
 
   const { strokeColor, fillColor, textColor } = getCustomColorsFromData(data)
@@ -51,17 +53,19 @@ export function ColorDescriptionSVG({
           stroke={strokeColor}
           fill={fillColor}
         />
-        {/* Description Text */}
-        <CustomText
+        {/* Description Text — wrap inside the shape, leaving room for the
+            notched top-right corner. Vertical lines are capped at what
+            fits inside the node height. */}
+        <MultilineText
+          text={name}
           x={width / 2}
           y={height / 2}
-          dominantBaseline="middle"
-          textAnchor="middle"
+          maxWidth={width - 24}
+          fontSize={LAYOUT.NAME_FONT_SIZE}
           fontWeight="600"
           fill={textColor}
-        >
-          {name}
-        </CustomText>
+          maxLines={maxLinesForHeight(height - 16, LAYOUT.NAME_LINE_HEIGHT)}
+        />
       </g>
     </svg>
   )

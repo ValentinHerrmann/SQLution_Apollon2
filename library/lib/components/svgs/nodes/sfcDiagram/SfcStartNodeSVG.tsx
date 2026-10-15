@@ -1,5 +1,6 @@
-import { CustomText, StyledRect } from "@/components"
-import { LINE_WIDTH } from "@/constants"
+import { MultilineText, StyledRect } from "@/components"
+import { LAYOUT } from "@/constants"
+import { maxLinesForHeight } from "@/utils"
 import { DefaultNodeProps } from "@/types"
 import { SVGComponentProps } from "@/types/SVG"
 import { getCustomColorsFromData } from "@/utils/layoutUtils"
@@ -13,11 +14,11 @@ export const SfcStartNodeSVG: React.FC<Props> = ({
   height,
   data,
   svgAttributes,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
 }) => {
   const { name } = data
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
   const innerPadding = 5
 
   const { fillColor, strokeColor, textColor } = getCustomColorsFromData(data)
@@ -44,18 +45,18 @@ export const SfcStartNodeSVG: React.FC<Props> = ({
         height={height - innerPadding * 2}
         fill="none"
         stroke={strokeColor}
-        strokeWidth={LINE_WIDTH}
+        strokeWidth={LAYOUT.LINE_WIDTH}
       />
-      <CustomText
+      <MultilineText
+        text={name}
         x={width / 2}
         y={height / 2}
-        textAnchor="middle"
-        dominantBaseline="central"
-        style={{ fontWeight: 600 }}
+        maxWidth={width - 16}
+        fontSize={LAYOUT.NAME_FONT_SIZE}
+        fontWeight="600"
         fill={textColor}
-      >
-        {name}
-      </CustomText>
+        maxLines={maxLinesForHeight(height - 16, LAYOUT.NAME_LINE_HEIGHT)}
+      />
     </svg>
   )
 }

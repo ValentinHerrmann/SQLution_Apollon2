@@ -1,75 +1,77 @@
-import { Box, FormControl, Select, MenuItem } from "@mui/material"
-import { EdgeStyleEditor, Typography } from "@/components/ui"
+import { IconButton } from "@/components/ui"
+import { EdgeStyleEditor } from "@/components/styleEditor"
 import { useReactFlow } from "@xyflow/react"
-import { SwapHorizIcon } from "@/components/Icon"
-import { useEdgePopOver } from "@/hooks"
+import { ArrowLeftRight } from "lucide-react"
+import { useEdgePopOver, useReactiveEdge, useReactiveNodeName } from "@/hooks"
 import { PopoverProps } from "../types"
 import { CustomEdgeProps } from "@/edges"
+import { useLabels } from "@/i18n/useLabels"
+import { EdgeTypeSelect, EdgeTypeOption } from "./EdgeTypeSelect"
+import {
+  ConnectionInfo,
+  hasDistinctEndpointNames,
+  PopoverLayout,
+  PopoverSection,
+} from "../PopoverLayout"
 
 export const ComponentEdgeEditPopover: React.FC<PopoverProps> = ({
   elementId,
 }) => {
-  const { getEdge, getNode, updateEdgeData } = useReactFlow()
+  const t = useLabels()
+  const { updateEdgeData } = useReactFlow()
 
-  const edge = getEdge(elementId)
+  const COMPONENT_EDGE_TYPE_OPTIONS: ReadonlyArray<EdgeTypeOption> = [
+    { value: "ComponentDependency", label: t.dependency },
+    { value: "ComponentProvidedInterface", label: t.providedInterface },
+    { value: "ComponentRequiredInterface", label: t.requiredInterface },
+  ]
+
+  const edge = useReactiveEdge(elementId)
+  const sourceName = useReactiveNodeName(edge?.source, t.source)
+  const targetName = useReactiveNodeName(edge?.target, t.target)
   const { handleEdgeTypeChange, handleSwap } = useEdgePopOver(elementId)
 
   if (!edge) {
     return null
   }
 
-  const sourceNode = getNode(edge.source)
-  const targetNode = getNode(edge.target)
-  const sourceName = (sourceNode?.data?.name as string) ?? "Source"
-  const targetName = (targetNode?.data?.name as string) ?? "Target"
-
-  const componentEdgeTypeOptions = [
-    { value: "ComponentDependency", label: "Dependency" },
-    { value: "ComponentProvidedInterface", label: "Provided Interface" },
-    { value: "ComponentRequiredInterface", label: "Required Interface" },
-  ]
-
   const edgeData = edge.data as CustomEdgeProps | undefined
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+    <PopoverLayout title={t.edge}>
       <EdgeStyleEditor
         edgeData={edgeData}
         handleDataFieldUpdate={(key, value) =>
           updateEdgeData(elementId, { ...edge.data, [key]: value })
         }
-        label="Control Flow"
+        label={t.style}
         sideElements={[
           handleSwap && (
-            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-              <SwapHorizIcon
-                style={{ cursor: "pointer" }}
-                onClick={handleSwap}
-              />
-            </Box>
+            <IconButton
+              key="swap-source-target"
+              ariaLabel={t.swapSourceTarget}
+              tooltip={t.swapSourceTarget}
+              onClick={handleSwap}
+            >
+              <ArrowLeftRight width={16} height={16} aria-hidden="true" />
+            </IconButton>
           ),
         ]}
       />
 
-      <FormControl fullWidth size="small">
-        <Select
-          labelId="edge-type-label"
-          id="edge-type-select"
+      <PopoverSection divider>
+        <EdgeTypeSelect
           value={edge.type}
-          label="Edge Type"
-          onChange={(e) => handleEdgeTypeChange(e.target.value)}
-        >
-          {componentEdgeTypeOptions.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+          options={COMPONENT_EDGE_TYPE_OPTIONS}
+          onChange={handleEdgeTypeChange}
+        />
+      </PopoverSection>
 
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        {sourceName} → {targetName}
-      </Typography>
-    </Box>
+      {hasDistinctEndpointNames(sourceName, targetName) && (
+        <PopoverSection title={t.connection} divider>
+          <ConnectionInfo source={sourceName} target={targetName} />
+        </PopoverSection>
+      )}
+    </PopoverLayout>
   )
 }

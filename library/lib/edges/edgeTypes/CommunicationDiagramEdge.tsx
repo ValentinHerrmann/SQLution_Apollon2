@@ -1,18 +1,12 @@
-import { BaseEdge } from "@xyflow/react"
-import {
-  BaseEdgeProps,
-  EdgeEndpointMarkers,
-  CommonEdgeElements,
-} from "../GenericEdge"
+import { BaseEdgeProps, StepEdgeBody, CommonEdgeElements } from "../GenericEdge"
 import { EdgeMultipleLabels } from "../labelTypes/EdgeMultipleLabels"
+import { getMessageHostSegment } from "../labelTypes/messageLayout"
 import { useEdgeConfig } from "@/hooks/useEdgeConfig"
-import { DiagramEdgeType } from "@/edges/types"
+import type { DiagramEdgeType } from "@/edges/types"
 import { useStepPathEdge } from "@/hooks/useStepPathEdge"
 import { useDiagramStore, usePopoverStore } from "@/store/context"
 import { useShallow } from "zustand/shallow"
 import { useToolbar } from "@/hooks"
-import { useRef } from "react"
-import { EDGE_HIGHTLIGHT_STROKE_WIDTH } from "@/constants"
 import { FeedbackDropzone } from "@/components/wrapper/FeedbackDropzone"
 import { AssessmentSelectableWrapper } from "@/components"
 import { getCustomColorsFromDataForEdge } from "@/utils/layoutUtils"
@@ -32,7 +26,6 @@ export const CommunicationDiagramEdge = ({
   targetHandleId,
   data,
 }: BaseEdgeProps) => {
-  const anchorRef = useRef<SVGSVGElement | null>(null)
   const { handleDelete } = useToolbar({ id })
 
   const config = useEdgeConfig(type as DiagramEdgeType)
@@ -55,9 +48,10 @@ export const CommunicationDiagramEdge = ({
     edgeData,
     currentPath,
     overlayPath,
-    midpoints,
+    bendHandles,
+    isBendDragging,
+    draggingHandleSegmentIndex,
     hasInitialCalculation,
-    isReconnectingRef,
     markerEnd,
     markerStart,
     strokeDashArray,
@@ -65,7 +59,10 @@ export const CommunicationDiagramEdge = ({
     handleEndpointPointerDown,
     sourcePoint,
     targetPoint,
+    sourcePosition: renderSourcePosition,
+    targetPosition: renderTargetPosition,
     isDiagramModifiable,
+    canEditEndpoint,
   } = useStepPathEdge({
     id,
     type,
@@ -81,94 +78,65 @@ export const CommunicationDiagramEdge = ({
     targetHandleId,
     data,
     allowMidpointDragging,
-    enableReconnection: true,
-    enableStraightPath: false,
   })
 
   const { strokeColor, textColor } = getCustomColorsFromDataForEdge(data)
   const markerKey = `${id}-${markerStart ?? "none"}-${markerEnd ?? "none"}`
 
+  // Host the message stack on the edge's longest arm, not the raw mid-segment:
+  // a short jog between two long arms would otherwise centre the labels on the
+  // jog and cross both neighbouring arms.
+  const messageHost = getMessageHostSegment(
+    edgeData.activePoints,
+    edgeData.sourcePoint,
+    edgeData.targetPoint
+  )
+
   return (
     <AssessmentSelectableWrapper elementId={id} asElement="g">
       <FeedbackDropzone elementId={id} asElement="path" elementType={type}>
-        <g className="edge-container">
-          <BaseEdge
-            key={markerKey}
-            id={id}
-            path={currentPath}
-            markerEnd={isReconnectingRef.current ? undefined : markerEnd}
-            pointerEvents="none"
-            style={{
-              stroke: strokeColor,
-              strokeDasharray: isReconnectingRef.current
-                ? "none"
-                : strokeDashArray,
-              transition: hasInitialCalculation
-                ? "opacity 0.1s ease-in"
-                : "none",
-              opacity: 1,
-            }}
-          />
-
-          <path
-            ref={pathRef}
-            className="edge-overlay"
-            d={overlayPath}
-            fill="none"
-            strokeWidth={EDGE_HIGHTLIGHT_STROKE_WIDTH}
-            pointerEvents="stroke"
-            style={{
-              opacity: isReconnectingRef.current ? 0 : 0.4,
-            }}
-          />
-
-          <EdgeEndpointMarkers
-            sourcePoint={sourcePoint}
-            targetPoint={targetPoint}
-            isDiagramModifiable={isDiagramModifiable}
-            diagramType="step"
-            pathType="step"
-            onSourcePointerDown={(e) => handleEndpointPointerDown(e, "source")}
-            onTargetPointerDown={(e) => handleEndpointPointerDown(e, "target")}
-          />
-
-          {isDiagramModifiable &&
-            !isReconnectingRef.current &&
-            allowMidpointDragging &&
-            midpoints.map((point, midPointIndex) => (
-              <circle
-                className="edge-circle"
-                pointerEvents="all"
-                key={`${id}-midpoint-${midPointIndex}`}
-                cx={point.x}
-                cy={point.y}
-                r={10}
-                fill="lightgray"
-                stroke="none"
-                style={{ cursor: "grab", zIndex: 9999 }}
-                onPointerDown={(e) => handlePointerDown(e, midPointIndex)}
-              />
-            ))}
-        </g>
+        <StepEdgeBody
+          id={id}
+          markerKey={markerKey}
+          currentPath={currentPath}
+          overlayPath={overlayPath}
+          pathRef={pathRef}
+          strokeColor={strokeColor}
+          strokeDashArray={strokeDashArray}
+          hasInitialCalculation={hasInitialCalculation}
+          isBendDragging={isBendDragging}
+          draggingHandleSegmentIndex={draggingHandleSegmentIndex}
+          markerStart={markerStart}
+          markerEnd={markerEnd}
+          sourcePoint={sourcePoint}
+          targetPoint={targetPoint}
+          sourcePosition={renderSourcePosition}
+          targetPosition={renderTargetPosition}
+          isDiagramModifiable={isDiagramModifiable}
+          canEditEndpoint={canEditEndpoint}
+          allowMidpointDragging={allowMidpointDragging}
+          bendHandles={bendHandles}
+          handleEndpointPointerDown={handleEndpointPointerDown}
+          handlePointerDown={handlePointerDown}
+        />
 
         <EdgeMultipleLabels
           messages={data?.messages}
-          pathMiddlePosition={edgeData.pathMiddlePosition}
+          pathMiddlePosition={messageHost.point}
           showRelationshipLabels={true}
-          isReconnectingRef={isReconnectingRef}
-          sourcePosition={{ x: sourceX, y: sourceY }}
-          targetPosition={{ x: targetX, y: targetY }}
+          sourcePosition={messageHost.start}
+          targetPosition={messageHost.end}
           textColor={textColor}
-          edgePoints={edgeData.activePoints}
-          isHorizontalEdge={edgeData.isMiddlePathHorizontal}
+          isHorizontalEdge={messageHost.isHorizontal}
         />
 
         <CommonEdgeElements
           id={id}
+          data={data}
           pathMiddlePosition={edgeData.pathMiddlePosition}
+          toolbarPosition={edgeData.toolbarPosition}
           isDiagramModifiable={isDiagramModifiable}
           assessments={assessments}
-          anchorRef={anchorRef}
           handleDelete={handleDelete}
           setPopOverElementId={setPopOverElementId}
           type={type}

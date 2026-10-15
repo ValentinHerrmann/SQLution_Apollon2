@@ -1,94 +1,85 @@
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
-import { resolve, join } from "path"
-import fs from "fs"
+import { tanstackRouter } from "@tanstack/router-plugin/vite"
+import { resolve } from "path"
 import tailwindcss from "@tailwindcss/vite"
-// tsconfigPaths optional; using a targeted transform plugin instead
+
+// Cross-package source aliases. Kept INLINE here (and mirrored in ./viteResolve
+// for the Storybook vitest config) rather than imported: importing a sibling
+// module crashes Vite's esbuild config loader in the CI Playwright container
+// (mcr.microsoft.com/playwright noble), so only this config must stay
+// self-contained. Keep the two copies in sync.
+const apollonAliases = [
+  { find: "assets", replacement: resolve(__dirname, "assets") },
+  {
+    find: "@tumaet/apollon",
+    replacement: resolve(__dirname, "../../library/lib"),
+  },
+  {
+    find: "@tumaet/ui",
+    replacement: resolve(__dirname, "../../packages/ui/src"),
+  },
+]
+
+// Pure routing kernel loaded by a module Worker. It contains no JSX and must not
+// receive React Refresh's browser-only `window` preamble in dev mode.
+const ROUTING_KERNEL =
+  /library\/lib\/(?:utils\/geometry\/|utils\/(?:edgeUtils|connectionModes)\.ts|edges\/Connection\.ts)/
+
+// Resolve the shared `@/` prefix by importer so each workspace keeps its own root.
+const createApollonAliasResolver = () => {
+  const libraryRoot = `${resolve(__dirname, "../../library").replace(/\\/g, "/")}/`
+  const libRoot = resolve(__dirname, "../../library/lib")
+  const webappRoot = resolve(__dirname, "src")
+
+  return {
+    name: "apollon-alias-resolver",
+    enforce: "pre" as const,
+    async resolveId(source: string, importer?: string) {
+      if (!source.startsWith("@/")) return null
+      const root =
+        importer?.replace(/\\/g, "/").startsWith(libraryRoot) === true
+          ? libRoot
+          : webappRoot
+      return this.resolve(resolve(root, source.slice(2)), importer, {
+        skipSelf: true,
+      })
+    },
+  }
+}
+
+const webappPort = Number(process.env.APOLLON_WEBAPP_PORT || 5173)
+const serverPort = Number(process.env.APOLLON_SERVER_PORT || 8000)
+const wsPort = Number(process.env.APOLLON_WS_PORT || 4444)
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    react(),
+    // Must run BEFORE the react plugin so it can transform route files and
+    // (re)generate src/routeTree.gen.ts. File options live in tsr.config.json.
+    tanstackRouter({ target: "react", autoCodeSplitting: true }),
+    react({
+      exclude: ROUTING_KERNEL,
+      babel: { plugins: [["babel-plugin-react-compiler", { target: "19" }]] },
+    }),
     tailwindcss(),
-    {
-      name: "apollon-rewrite-internal-alias",
-      enforce: "pre",
-      transform(code, id) {
-        const fsPrefix = "/@fs/"
-        const libraryRoot = resolve(__dirname, "../../library")
-        const absId = id.startsWith(fsPrefix) ? id.slice(fsPrefix.length) : id
-        if (!absId.startsWith(libraryRoot)) return null
-        const libraryLibRoot = resolve(libraryRoot, "lib")
-        const resolveFile = (basePath: string): string => {
-          try {
-            const stat = fs.existsSync(basePath)
-              ? fs.statSync(basePath)
-              : undefined
-            if (stat?.isFile()) return basePath
-            if (stat?.isDirectory()) {
-              const idxCandidates = [
-                "index.tsx",
-                "index.ts",
-                "index.jsx",
-                "index.js",
-                "index.mjs",
-                "index.cjs",
-              ]
-              for (const name of idxCandidates) {
-                const p = join(basePath, name)
-                if (fs.existsSync(p)) return p
-              }
-            }
-            const extCandidates = [
-              ".tsx",
-              ".ts",
-              ".jsx",
-              ".js",
-              ".mjs",
-              ".cjs",
-              ".css",
-              ".json",
-            ]
-            for (const ext of extCandidates) {
-              const p = `${basePath}${ext}`
-              if (fs.existsSync(p) && fs.statSync(p).isFile()) return p
-            }
-          } catch {
-            // ignore and fall through
-          }
-          return basePath // fall back; Vite may still resolve
-        }
-
-        const rewritten = code.replace(
-          /(["'])@\/(.+?)\1/g,
-          (_m: string, q: string, sub: string) => {
-            const absBase = resolve(libraryLibRoot, sub)
-            const resolvedFile = resolveFile(absBase)
-            const target = `${fsPrefix}${resolvedFile}`
-            return `${q}${target}${q}`
-          }
-        )
-        return { code: rewritten, map: null }
-      },
-    },
+    createApollonAliasResolver(),
   ],
+  // Worker bundles run their own plugin pipeline. The edge-geometry worker is
+  // reached through the library source alias, so it needs the same `@/` rewrite
+  // as the main webapp graph rather than resolving those imports into webapp/src.
+  worker: {
+    plugins: () => [createApollonAliasResolver()],
+  },
   resolve: {
-    alias: [
-      { find: "@", replacement: resolve(__dirname, "src") },
-      { find: "assets", replacement: resolve(__dirname, "assets") },
-      // Use local library build output entry file for reliable resolution
-      {
-        find: "@tumaet/apollon",
-        replacement: resolve(__dirname, "../../library/lib"),
-      },
-    ],
+    alias: apollonAliases,
     // Avoid duplicate React copies across workspace
-    dedupe: ["react", "react-dom", "@emotion/react", "@emotion/styled"],
+    dedupe: ["react", "react-dom"],
   },
   server: {
-    port: 5173,
+    port: webappPort,
     host: true,
-    strictPort: true,
+    strictPort: false,
     fs: {
       // Allow serving files from the monorepo root and the library package
       allow: [
@@ -98,11 +89,18 @@ export default defineConfig({
     },
     proxy: {
       "/api": {
-        target: "http://localhost:8000",
+        target: `http://127.0.0.1:${serverPort}`,
+        changeOrigin: true,
+      },
+      // The server-rendered embed page lives on the API host. Proxy it too so
+      // the iframe snippet (which points at the webapp origin in dev) resolves
+      // instead of falling through to the SPA's catch-all error page.
+      "/embed": {
+        target: `http://127.0.0.1:${serverPort}`,
         changeOrigin: true,
       },
       "/ws": {
-        target: "ws://localhost:4444",
+        target: `ws://127.0.0.1:${wsPort}`,
         ws: true,
         changeOrigin: true,
       },

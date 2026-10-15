@@ -3,12 +3,12 @@ import { useShallow } from "zustand/shallow"
 import { ObjectNodeProps } from "@/types"
 import { PopoverProps } from "../types"
 import { GiveFeedbackAssessmentBox } from "../GiveFeedbackAssessmentBox"
-import Button from "@mui/material/Button"
-import { useGoToNextAssessment } from "@/hooks"
+import { useLabels } from "@/i18n/useLabels"
+import { PopoverLayout } from "../PopoverLayout"
 
 export const ObjectGiveFeedbackPopover = ({ elementId }: PopoverProps) => {
   const nodes = useDiagramStore(useShallow((state) => state.nodes))
-  const handleGoToNextAssessment = useGoToNextAssessment(elementId)
+  const t = useLabels()
 
   const node = nodes.find((node) => node.id === elementId)
   if (!node) return null
@@ -16,18 +16,20 @@ export const ObjectGiveFeedbackPopover = ({ elementId }: PopoverProps) => {
   const nodeData = node.data as ObjectNodeProps
 
   return (
-    <>
+    <PopoverLayout>
       <GiveFeedbackAssessmentBox
         elementId={elementId}
         name={nodeData.name}
-        type="Node"
+        elementType="node"
+        typeLabel={t.nodeTypeLabel(node.type)}
       />
       {nodeData.attributes.map((attr) => (
         <GiveFeedbackAssessmentBox
           key={attr.id}
           elementId={attr.id}
           name={attr.name}
-          type="Attribute"
+          elementType="attribute"
+          divider
         />
       ))}
       {nodeData.methods.map((method) => (
@@ -35,17 +37,10 @@ export const ObjectGiveFeedbackPopover = ({ elementId }: PopoverProps) => {
           key={method.id}
           elementId={method.id}
           name={method.name}
-          type="Method"
+          elementType="method"
+          divider
         />
       ))}
-      <Button
-        variant="contained"
-        size="small"
-        onClick={handleGoToNextAssessment}
-        style={{ textTransform: "none" }}
-      >
-        Next
-      </Button>
-    </>
+    </PopoverLayout>
   )
 }

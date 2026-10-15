@@ -1,23 +1,41 @@
 import { IPoint } from "../Connection"
+import {
+  computeMiddleLabelLayout,
+  computeUseCaseLabelLayout,
+  type Rect,
+} from "@/utils/geometry/edgeLabelLayout"
+import { measureTextWidth } from "@/utils/textUtils"
+import { FONT_FAMILY } from "@/fontStack"
+
+/** Perpendicular offset (flow px) of a use-case association label off its line. */
+const USE_CASE_LABEL_OFFSET = 15
 
 interface EdgeMiddleLabelsProps {
   label?: string | null
-  pathMiddlePosition: IPoint
-  isMiddlePathHorizontal: boolean
+  /** The edge's full rendered polyline (orthogonal edges). */
+  activePoints?: IPoint[]
   sourcePoint?: IPoint
   targetPoint?: IPoint
+  anchorPoint?: IPoint
+  /** Every node the edge routes near, so the label avoids all of them. */
+  nodeRects?: Rect[]
+  neighborGeometry?: IPoint[][]
   showRelationshipLabels?: boolean
   isUseCasePath?: boolean
-  isPetriNet?: boolean // New prop to identify PetriNet edges
+  isPetriNet?: boolean
   textColor: string
 }
 
+const LABEL_FONT_SIZE = 12
+
 export const EdgeMiddleLabels = ({
   label,
-  pathMiddlePosition,
-  isMiddlePathHorizontal,
+  activePoints,
   sourcePoint,
   targetPoint,
+  anchorPoint,
+  nodeRects,
+  neighborGeometry,
   showRelationshipLabels = false,
   isUseCasePath = false,
   isPetriNet = false,
@@ -27,52 +45,68 @@ export const EdgeMiddleLabels = ({
 
   if (!label || !showRelationshipLabels) return null
 
-  // Calculate position and rotation for the label
-  let x: number
-  let y: number
-  let rotation = 0
-
+  // Diagonal connectors (use-case associations, petri arcs) run through
+  // useStraightPathEdge and can sit at any angle, so the label is rotated to
+  // lie along the line with a perpendicular offset — the orthogonal side model
+  // below does not apply to them.
   if (isUseCasePath && sourcePoint && targetPoint) {
-    const dx = targetPoint.x - sourcePoint.x
-    const dy = targetPoint.y - sourcePoint.y
-    const angle = Math.atan2(dy, dx) * (180 / Math.PI)
-    rotation = angle > 90 || angle < -90 ? angle + 180 : angle
+    const { x, y, rotation } = computeUseCaseLabelLayout(
+      sourcePoint,
+      targetPoint,
+      USE_CASE_LABEL_OFFSET,
+      anchorPoint
+    )
 
-    const offsetDistance = 15
-    const perpX = -dy
-    const perpY = dx
-    const perpLength = Math.sqrt(perpX * perpX + perpY * perpY)
-
-    if (perpLength > 0) {
-      const normalizedPerpX = perpX / perpLength
-      const normalizedPerpY = perpY / perpLength
-      x = (sourcePoint.x + targetPoint.x) / 2 + normalizedPerpX * offsetDistance
-      y = (sourcePoint.y + targetPoint.y) / 2 + normalizedPerpY * offsetDistance
-    } else {
-      x = (sourcePoint.x + targetPoint.x) / 2
-      y = (sourcePoint.y + targetPoint.y) / 2
-    }
-  } else {
-    const offsetX = isMiddlePathHorizontal ? 0 : 10
-    const offsetY = isMiddlePathHorizontal ? 20 : 0
-    x = pathMiddlePosition.x + offsetX
-    y = pathMiddlePosition.y + offsetY
+    return (
+      <text
+        x={x}
+        y={y}
+        textAnchor="middle"
+        dominantBaseline="central"
+        transform={`rotate(${rotation} ${x} ${y})`}
+        style={{
+          fontSize: "12px",
+          fontWeight: 700,
+          fill: textColor,
+          userSelect: "none",
+          pointerEvents: "none",
+        }}
+        className="nodrag nopan"
+      >
+        {label}
+      </text>
+    )
   }
+
+  // Orthogonal edges: hosted on whichever arm + side has room, so the label
+  // clears its own other arms, connected nodes, and nearby edges.
+  if (!activePoints || activePoints.length < 2) return null
+  const placed = computeMiddleLabelLayout({
+    renderPoints: activePoints,
+    labelText: label,
+    fontSize: LABEL_FONT_SIZE,
+    // Real ink width (bold), so the scored box matches what renders.
+    measuredWidth: measureTextWidth(
+      label,
+      `700 ${LABEL_FONT_SIZE}px ${FONT_FAMILY}`
+    ),
+    nodeRects,
+    neighborGeometry,
+  })
 
   return (
     <text
-      x={x}
-      y={y}
-      textAnchor="middle"
-      dominantBaseline="middle"
+      x={placed.x}
+      y={placed.y}
+      textAnchor={placed.textAnchor}
+      dominantBaseline={placed.dominantBaseline}
       style={{
-        fontSize: "12px",
+        fontSize: `${LABEL_FONT_SIZE}px`,
         fontWeight: 700,
         fill: textColor,
         userSelect: "none",
         pointerEvents: "none",
       }}
-      transform={rotation !== 0 ? `rotate(${rotation} ${x} ${y})` : undefined}
       className="nodrag nopan"
     >
       {label}

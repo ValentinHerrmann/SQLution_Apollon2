@@ -1,4 +1,4 @@
-import { EXTRA_SPACE_FOR_EXTENTION } from "@/constants"
+import { CANVAS } from "@/constants"
 import { DefaultNodeProps } from "@/types"
 
 /**
@@ -13,7 +13,8 @@ export const calculateMinWidth = (
 ): number => {
   const minWidth = maxTextWidth + 2 * padding
   const minWidthWithSnapToGrid =
-    Math.ceil(minWidth / EXTRA_SPACE_FOR_EXTENTION) * EXTRA_SPACE_FOR_EXTENTION
+    Math.ceil(minWidth / CANVAS.EXTRA_SPACE_FOR_EXTENSION) *
+    CANVAS.EXTRA_SPACE_FOR_EXTENSION
   return minWidthWithSnapToGrid
 }
 
@@ -38,14 +39,22 @@ export const calculateMinHeight = (
     attributesCount * attributeHeight +
     methodsCount * methodHeight
   const minHeightWithSnapToGrid =
-    Math.ceil(minHeight / EXTRA_SPACE_FOR_EXTENTION) * EXTRA_SPACE_FOR_EXTENTION
+    Math.ceil(minHeight / CANVAS.EXTRA_SPACE_FOR_EXTENSION) *
+    CANVAS.EXTRA_SPACE_FOR_EXTENSION
   return minHeightWithSnapToGrid
 }
 
+// Every CSS-variable reference carries a literal fallback so the editor
+// renders correctly even when the host page never defines the theme
+// variables (e.g. embedded on a plain site). Without the fallback an
+// undefined variable makes the SVG `fill`/`stroke` default to black.
+const STROKE_VAR = "var(--apollon-foreground, #000000)"
+const FILL_VAR = "var(--apollon-background, #ffffff)"
+
 export const getCustomColorsFromData = (data: DefaultNodeProps) => {
-  const strokeColor = data.strokeColor || "var(--apollon2-primary-contrast)"
-  const fillColor = data.fillColor || "var(--apollon2-background)"
-  const textColor = data.textColor || "var(--apollon2-primary-contrast)"
+  const strokeColor = data.strokeColor || STROKE_VAR
+  const fillColor = data.fillColor || FILL_VAR
+  const textColor = data.textColor || STROKE_VAR
   return { strokeColor, fillColor, textColor }
 }
 
@@ -53,7 +62,7 @@ export const getCustomColorsFromDataForEdge = (data?: {
   strokeColor?: string
   textColor?: string
 }) => {
-  const strokeColor = data?.strokeColor || "var(--apollon2-primary-contrast)"
-  const textColor = data?.textColor || "var(--apollon2-primary-contrast)"
+  const strokeColor = data?.strokeColor || STROKE_VAR
+  const textColor = data?.textColor || STROKE_VAR
   return { strokeColor, textColor }
 }

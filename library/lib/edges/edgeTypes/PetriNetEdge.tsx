@@ -2,7 +2,7 @@ import { BaseEdge } from "@xyflow/react"
 import {
   BaseEdgeProps,
   CommonEdgeElements,
-  EdgeEndpointMarkers,
+  StraightEdgeControls,
 } from "../GenericEdge"
 import { EdgeMiddleLabels } from "../labelTypes/EdgeMiddleLabels"
 import { useEdgeConfig } from "@/hooks/useEdgeConfig"
@@ -10,13 +10,13 @@ import { useStraightPathEdge } from "@/hooks/useStraightPathEdge"
 import { useDiagramStore, usePopoverStore } from "@/store/context"
 import { useShallow } from "zustand/shallow"
 import { useToolbar } from "@/hooks"
-import { useRef } from "react"
-import { EDGE_HIGHTLIGHT_STROKE_WIDTH } from "@/constants"
+import { EDGES } from "@/constants"
 import {
   AssessmentSelectableWrapper,
   FeedbackDropzone,
 } from "@/components/wrapper"
 import { getCustomColorsFromDataForEdge } from "@/utils/layoutUtils"
+import { EdgeInlineMarkers } from "@/components/svgs/edges/InlineMarker"
 
 export const PetriNetEdge = ({
   id,
@@ -33,7 +33,6 @@ export const PetriNetEdge = ({
   targetHandleId,
   data,
 }: BaseEdgeProps) => {
-  const anchorRef = useRef<SVGSVGElement | null>(null)
   const { handleDelete } = useToolbar({ id })
 
   const config = useEdgeConfig(type as "PetriNetArc")
@@ -60,10 +59,20 @@ export const PetriNetEdge = ({
     strokeDashArray,
     sourcePoint,
     targetPoint,
+    sourceNeighbor,
+    targetNeighbor,
+    route,
+    interior,
+    selectedWaypointIndex,
+    sourcePosition: renderSourcePosition,
+    targetPosition: renderTargetPosition,
     isDiagramModifiable,
+    canEditEndpoint,
     handleEndpointPointerDown,
-    isReconnectingRef,
-    tempReconnectPath,
+    handleWaypointPointerDown,
+    handleGhostPointerDown,
+    handleWaypointDoubleClick,
+    handleWaypointKeyDown,
   } = useStraightPathEdge({
     id,
     type,
@@ -77,6 +86,7 @@ export const PetriNetEdge = ({
     targetPosition,
     sourceHandleId,
     targetHandleId,
+    data,
   })
 
   const { strokeColor, textColor } = getCustomColorsFromDataForEdge(data)
@@ -89,13 +99,22 @@ export const PetriNetEdge = ({
           <BaseEdge
             key={markerKey}
             id={id}
-            path={tempReconnectPath || currentPath}
-            markerEnd={isReconnectingRef.current ? undefined : markerEnd}
+            path={currentPath}
             pointerEvents="none"
+            // Select/hover ride `.edge-overlay`, not RF's fat interaction ribbon,
+            // so the ribbon can't paint over a neighbour edge's handle. See GenericEdge.
+            interactionWidth={0}
             style={{
               stroke: strokeColor,
               strokeDasharray: strokeDashArray,
             }}
+          />
+
+          <EdgeInlineMarkers
+            pathD={currentPath}
+            markerEnd={markerEnd}
+            markerStart={markerStart}
+            strokeColor={strokeColor}
           />
 
           <path
@@ -103,57 +122,53 @@ export const PetriNetEdge = ({
             className="edge-overlay"
             d={overlayPath}
             fill="none"
-            strokeWidth={EDGE_HIGHTLIGHT_STROKE_WIDTH}
+            strokeWidth={EDGES.EDGE_HIGHLIGHT_STROKE_WIDTH}
             pointerEvents="stroke"
-            style={{ opacity: isReconnectingRef.current ? 0 : 0.4 }}
+            style={{ opacity: 0.4 }}
           />
 
-          {/* Temporary reconnection path */}
-          {/* Removed - now using tempReconnectPath directly in BaseEdge */}
-
-          {isDiagramModifiable && !isReconnectingRef.current && (
-            <EdgeEndpointMarkers
-              sourcePoint={sourcePoint}
-              targetPoint={targetPoint}
-              isDiagramModifiable={isDiagramModifiable}
-              diagramType="petriNet"
-              pathType="straight"
-              onSourcePointerDown={(e) =>
-                handleEndpointPointerDown(e, "source")
-              }
-              onTargetPointerDown={(e) =>
-                handleEndpointPointerDown(e, "target")
-              }
-            />
-          )}
+          <StraightEdgeControls
+            route={route}
+            interior={interior}
+            selectedWaypointIndex={selectedWaypointIndex}
+            sourcePoint={sourcePoint}
+            targetPoint={targetPoint}
+            sourcePosition={renderSourcePosition}
+            targetPosition={renderTargetPosition}
+            sourceNeighbor={sourceNeighbor}
+            targetNeighbor={targetNeighbor}
+            isDiagramModifiable={isDiagramModifiable}
+            canEditEndpoint={canEditEndpoint}
+            onEndpointPointerDown={handleEndpointPointerDown}
+            onWaypointPointerDown={handleWaypointPointerDown}
+            onWaypointDoubleClick={handleWaypointDoubleClick}
+            onWaypointKeyDown={handleWaypointKeyDown}
+            onGhostPointerDown={handleGhostPointerDown}
+          />
         </g>
 
-        {!isReconnectingRef.current && (
-          <>
-            <EdgeMiddleLabels
-              label={data?.label}
-              pathMiddlePosition={edgeData.pathMiddlePosition}
-              isMiddlePathHorizontal={edgeData.isMiddlePathHorizontal}
-              showRelationshipLabels={showRelationshipLabels}
-              sourcePoint={edgeData.sourcePoint}
-              targetPoint={edgeData.targetPoint}
-              isUseCasePath={true}
-              isPetriNet={true}
-              textColor={textColor}
-            />
+        <EdgeMiddleLabels
+          label={data?.label}
+          showRelationshipLabels={showRelationshipLabels}
+          sourcePoint={edgeData.labelSourcePoint}
+          targetPoint={edgeData.labelTargetPoint}
+          anchorPoint={edgeData.pathMiddlePosition}
+          isUseCasePath={true}
+          isPetriNet={true}
+          textColor={textColor}
+        />
 
-            <CommonEdgeElements
-              id={id}
-              pathMiddlePosition={edgeData.pathMiddlePosition}
-              isDiagramModifiable={isDiagramModifiable}
-              assessments={assessments}
-              anchorRef={anchorRef}
-              handleDelete={handleDelete}
-              setPopOverElementId={setPopOverElementId}
-              type={type}
-            />
-          </>
-        )}
+        <CommonEdgeElements
+          id={id}
+          data={data}
+          pathMiddlePosition={edgeData.pathMiddlePosition}
+          toolbarPosition={edgeData.toolbarPosition}
+          isDiagramModifiable={isDiagramModifiable}
+          assessments={assessments}
+          handleDelete={handleDelete}
+          setPopOverElementId={setPopOverElementId}
+          type={type}
+        />
       </FeedbackDropzone>
     </AssessmentSelectableWrapper>
   )

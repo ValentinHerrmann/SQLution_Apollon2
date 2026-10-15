@@ -9,7 +9,6 @@ interface Props {
   elementId: string
   elementType?: string
   asElement?: "g" | "div" | "path"
-  className?: string
 }
 
 export const FeedbackDropzone: React.FC<Props> = ({
@@ -17,7 +16,6 @@ export const FeedbackDropzone: React.FC<Props> = ({
   elementId,
   elementType,
   asElement = "g",
-  className,
 }) => {
   const { mode, readonly } = useMetadataStore(
     useShallow((store) => ({
@@ -69,19 +67,16 @@ export const FeedbackDropzone: React.FC<Props> = ({
 
   const getHoverStyle = () => {
     if (isDragOver) {
-      if (asElement === "div") {
-        return {
-          outline: "3px solid #0064ff66",
-        }
-      }
       if (asElement === "path") {
         return {
-          stroke: "#0064ff",
+          stroke: "var(--apollon-dropzone-accent, #0064ff)",
         }
       }
 
+      // div and g (default) targets share the translucent outline.
       return {
-        outline: "3px solid #0064ff66",
+        outline:
+          "3px solid var(--apollon-dropzone-accent-fill, rgba(0, 100, 255, 0.4))",
       }
     }
   }
@@ -97,7 +92,6 @@ export const FeedbackDropzone: React.FC<Props> = ({
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         style={hoverStyle}
-        className={className}
       >
         {children}
       </div>

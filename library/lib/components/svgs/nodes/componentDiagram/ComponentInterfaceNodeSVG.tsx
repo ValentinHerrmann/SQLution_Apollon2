@@ -1,14 +1,16 @@
-import { CustomText } from "@/components"
-import { LINE_WIDTH_INTERFACE } from "@/constants"
+import { InterfaceLabel } from "../InterfaceLabel"
+import { LAYOUT } from "@/constants"
 import { useDiagramStore } from "@/store"
 import { useShallow } from "zustand/shallow"
 import AssessmentIcon from "../../AssessmentIcon"
 import { SVGComponentProps } from "@/types/SVG"
 import { DefaultNodeProps } from "@/types"
 import { getCustomColorsFromData } from "@/utils/layoutUtils"
+import type { InterfaceLabelSide } from "@/utils/geometry/interfaceLabelLayout"
 
 interface Props extends SVGComponentProps {
   data: DefaultNodeProps
+  labelSide?: InterfaceLabelSide
 }
 export const ComponentInterfaceNodeSVG: React.FC<Props> = ({
   id,
@@ -16,14 +18,15 @@ export const ComponentInterfaceNodeSVG: React.FC<Props> = ({
   height,
   data,
   svgAttributes,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
   showAssessmentResults = false,
+  labelSide,
 }) => {
   const { name } = data
   const assessments = useDiagramStore(useShallow((state) => state.assessments))
   const nodeScore = assessments[id]?.score
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
 
   const { fillColor, strokeColor, textColor } = getCustomColorsFromData(data)
   return (
@@ -39,22 +42,18 @@ export const ComponentInterfaceNodeSVG: React.FC<Props> = ({
           cx={width / 2}
           cy={height / 2}
           r={width / 2}
-          strokeWidth={LINE_WIDTH_INTERFACE}
+          strokeWidth={LAYOUT.LINE_WIDTH_EDGE}
           stroke={strokeColor}
           fill={fillColor}
         />
 
-        {/* Name Text */}
-        <CustomText
-          x={width + 2}
-          y={-10}
-          textAnchor="start"
-          fontWeight="bold"
-          dominantBaseline="hanging"
+        <InterfaceLabel
+          name={name}
+          width={width}
+          height={height}
           fill={textColor}
-        >
-          {name}
-        </CustomText>
+          side={labelSide}
+        />
       </g>
 
       {showAssessmentResults && (

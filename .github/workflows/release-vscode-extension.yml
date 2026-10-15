@@ -1,0 +1,342 @@
+name: Release VS Code Extension
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - vscode-extension/package.json
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build + validate only, skip publish/tag/release"
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-vscode-extension
+  cancel-in-progress: false
+  queue: max
+
+permissions: {}
+
+jobs:
+  check:
+    name: Check for new version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      publisher: ${{ steps.v.outputs.publisher }}
+      name: ${{ steps.v.outputs.name }}
+      extension-id: ${{ steps.v.outputs.extension-id }}
+      publish: ${{ steps.v.outputs.publish }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          # The parent commit too, to read the version this push replaced.
+          fetch-depth: 2
+
+      - id: v
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./vscode-extension/package.json').version")
+          if [[ "$VERSION" == *-* || "$VERSION" == *+* ]]; then
+            echo "::error::vscode-extension version $VERSION is not strict SemVer MAJOR.MINOR.PATCH."
+            exit 1
+          fi
+
+          # The manifest is the only source for the Marketplace identity: `vsce`
+          # and `ovsx` derive what they publish from `publisher` and `name`, so
+          # anything this workflow states about the extension has to be read from
+          # there too. A second copy here would decide which listing gets queried
+          # while the manifest decided which listing gets written.
+          PUBLISHER=$(node -p "require('./vscode-extension/package.json').publisher")
+          NAME=$(node -p "require('./vscode-extension/package.json').name")
+          EXT_ID="${PUBLISHER}.${NAME}"
+          {
+            echo "version=$VERSION"
+            echo "publisher=$PUBLISHER"
+            echo "name=$NAME"
+            echo "extension-id=$EXT_ID"
+          } >> "$GITHUB_OUTPUT"
+
+          # A release is a version change, and nothing else. This workflow wakes
+          # on any edit to the manifest, which also carries the icon, the
+          # commands and the settings schema — so an unrelated edit would
+          # otherwise ship whatever version happened to be sitting there.
+          # Publishing a version the manifest already held is `workflow_dispatch`,
+          # chosen deliberately.
+          if [ "$EVENT_NAME" = "push" ]; then
+            BEFORE=$(git show "${GITHUB_SHA}^:vscode-extension/package.json" 2>/dev/null \
+              | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version" 2>/dev/null || echo "")
+            if [ "$BEFORE" = "$VERSION" ]; then
+              echo "::notice::vscode-extension stays at $VERSION — the manifest changed, the version did not. Nothing to release."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          MKT=$(curl -s -X POST https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery \
+            -H "Content-Type: application/json" -H "Accept: application/json;api-version=7.2-preview.1" \
+            -d "$(jq -nc --arg id "$EXT_ID" '{filters:[{criteria:[{filterType:7,value:$id}]}],flags:914}')" \
+            | jq -r '.results[0].extensions[0].versions[]?.version' | grep -Fx "$VERSION" || true)
+          if [ -n "$MKT" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+          TAG="${NAME}@${VERSION}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build VSIX
+    needs: [check]
+    if: needs.check.outputs.publish == 'true' || needs.check.outputs.release == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      vsix-name: ${{ steps.pack.outputs.name }}
+      vsix-sha256: ${{ steps.pack.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: ".nvmrc"
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @tumaet/apollon run build
+      - run: pnpm --filter apollon-extension run build:all
+
+      - name: Install vsce (sandboxed)
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/vsce-cli" --ignore-scripts @vscode/vsce@3.9.1
+          echo "$RUNNER_TEMP/vsce-cli/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Package VSIX
+        id: pack
+        working-directory: vscode-extension
+        # Through `package:vsix`, so the README base URLs are declared once. vsce
+        # ignores `repository.directory` (microsoft/vscode-vsce#980) and resolves
+        # a relative README link against the repository root, which for an
+        # extension in a subdirectory is one level too high — and it does so
+        # silently, shipping a 404 with no warning.
+        run: |
+          set -euo pipefail
+          pnpm run package:vsix
+          shopt -s nullglob
+          files=( *.vsix )
+          if [[ ${#files[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly 1 VSIX in vscode-extension/, found ${#files[@]}: ${files[*]}"
+            exit 1
+          fi
+          name="${files[0]}"
+          sha256=$(sha256sum "$name" | cut -d' ' -f1)
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: vsix
+          path: vscode-extension/${{ steps.pack.outputs.name }}
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Generate artifact attestation
+        if: ${{ !inputs.dry_run }}
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: vscode-extension/${{ steps.pack.outputs.name }}
+
+  publish:
+    name: Publish to Marketplace and Open VSX
+    needs: [check, build]
+    if: needs.check.outputs.publish == 'true' && !inputs.dry_run
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: vscode-marketplace
+    permissions:
+      contents: read
+    outputs:
+      ovsx: ${{ steps.ovsx.outputs.configured }}
+    steps:
+      # `.nvmrc` is the one source for the Node version, and this job has no
+      # working tree to read it from. `checkout` cleans the directory, so it has
+      # to precede the artifact download rather than follow it.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .nvmrc
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: vsix
+          path: ./
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: ".nvmrc"
+
+      - name: Install vsce + ovsx (sandboxed)
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/cli" --ignore-scripts @vscode/vsce@3.9.1 ovsx@0.10.12
+          echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Verify the Marketplace PAT can write this publisher
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          PUBLISHER: ${{ needs.check.outputs.publisher }}
+        # `vsce publish` surfaces a missing publisher grant only after uploading,
+        # so ask first. The manifest names the publisher; the PAT must be a member
+        # of it with Marketplace *Manage* scope, or nothing else in this job works.
+        run: vsce verify-pat "$PUBLISHER"
+
+      - name: Publish to VS Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VSIX_FILE: ${{ needs.build.outputs.vsix-name }}
+        run: vsce publish --skip-duplicate --no-dependencies --packagePath "$VSIX_FILE"
+
+      # Open VSX is optional: the Marketplace is the release channel of record.
+      # Without a token, say so and move on rather than failing a release that
+      # already reached the Marketplace.
+      - name: Check for an Open VSX token
+        id: ovsx
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -n "${OVSX_PAT:-}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::OVSX_PAT is not set — skipping Open VSX. The VS Marketplace release is unaffected."
+          fi
+
+      - name: Publish to Open VSX
+        if: steps.ovsx.outputs.configured == 'true'
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          VSIX_FILE: ${{ needs.build.outputs.vsix-name }}
+        # ovsx@0.10+ ships --skip-duplicate; a retry on an already-published
+        # version is a soft success. The VSIX sigstore attestation from the
+        # build job is the cryptographic anchor — checksum equality with the
+        # remote tarball is not a stronger guarantee.
+        run: ovsx publish --skip-duplicate "$VSIX_FILE"
+
+  release:
+    name: Tag + GitHub Release
+    needs: [check, build, publish]
+    # Backfill case: marketplace already has this version (publish skipped)
+    # but the GitHub Release tag is missing. We still need to cut the
+    # Release. Accept publish.result in {success, skipped}.
+    if: |
+      !cancelled() && !inputs.dry_run &&
+      needs.check.outputs.release == 'true' &&
+      needs.build.result == 'success' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          # Full history so extract-changelog.mjs can resolve each changelog
+          # entry's commit type (feat/fix/...) to group the release notes.
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: vsix
+          path: ./
+
+      - name: Tag + Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+          PUBLISHER: ${{ needs.check.outputs.publisher }}
+          NAME: ${{ needs.check.outputs.name }}
+          EXT_ID: ${{ needs.check.outputs.extension-id }}
+          OVSX: ${{ needs.publish.outputs.ovsx }}
+        run: |
+          set -euo pipefail
+          TAG="${NAME}@${VERSION}"
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$TAG"
+          fi
+          shopt -s nullglob
+          files=( ./*.vsix )
+          if [[ ${#files[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly 1 VSIX to attach, found ${#files[@]}: ${files[*]}"
+            exit 1
+          fi
+          VSIX="${files[0]}"
+
+          # Body = the Changesets-owned CHANGELOG section (curated per-PR voice),
+          # regrouped by category (Features/Bug Fixes/...) from each entry's
+          # commit type, plus an install footer. Fall back to GitHub's
+          # --generate-notes only when there is no changelog section for this
+          # version (e.g. a release that carried no changeset).
+          CHANGELOG=$(node scripts/extract-changelog.mjs "$VERSION" vscode-extension)
+
+          # Name the registries this release actually reached. Open VSX is
+          # skipped when no token is configured, and a release body that claims
+          # a publish that never happened is worse than one that omits it.
+          REGISTRIES="the [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=${EXT_ID})"
+          if [ "${OVSX:-}" = "true" ]; then
+            REGISTRIES="${REGISTRIES} and [Open VSX](https://open-vsx.org/extension/${PUBLISHER}/${NAME})"
+          fi
+
+          {
+            if [ -n "$CHANGELOG" ]; then printf '%s\n\n' "$CHANGELOG"; fi
+            cat <<EOF
+          Install:
+
+          \`\`\`sh
+          code --install-extension ${EXT_ID}
+          \`\`\`
+
+          Published to ${REGISTRIES}. VSIX attached for sideloading.
+          EOF
+          } > release-notes.md
+
+          GENERATE=()
+          [ -z "$CHANGELOG" ] && GENERATE=(--generate-notes)
+
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --target "$GITHUB_SHA" \
+            --verify-tag \
+            --latest=false \
+            "${GENERATE[@]}" \
+            --notes-file release-notes.md \
+            "$VSIX"

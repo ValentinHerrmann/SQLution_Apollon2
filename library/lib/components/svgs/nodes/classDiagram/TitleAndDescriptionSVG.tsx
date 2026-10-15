@@ -1,72 +1,60 @@
-import React, { useMemo, useCallback, SVGAttributes } from "react"
+import React, { useMemo, SVGAttributes } from "react"
+import { LAYOUT } from "@/constants"
+import { wrapTextInRect } from "@/utils/svgTextLayout"
 
 interface TitleAndDescriptionSVGProps {
   width: number
   height: number
   title: string
   description: string
-  transformScale?: number
+  SIDEBAR_PREVIEW_SCALE?: number
   svgAttributes?: SVGAttributes<SVGElement>
 }
+
+const TITLE_FONT_SIZE = 16
+const DESCRIPTION_FONT_SIZE = 14
+const DESCRIPTION_LINE_HEIGHT = 18
 
 export const TitleAndDescriptionSVG: React.FC<TitleAndDescriptionSVGProps> = ({
   width,
   height,
   title,
   description,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
   svgAttributes,
 }) => {
-  const padding = 10 // Padding inside the SVG
-  const titleHeight = 30 // Fixed height for the title
-  const separatorHeight = 1 // Height of the separator line
-  const lineHeight = 18 // Line height for description
-  const descriptionStartY = padding + titleHeight + separatorHeight + 10 // Space for description
-  const maxDescriptionHeight = height - descriptionStartY - padding // Max height for description
-
-  // Memoized wrapText function
-  const wrapText = useCallback((text: string, maxWidth: number): string[] => {
-    const words = text.split(" ")
-    const lines: string[] = []
-    let currentLine = ""
-
-    words.forEach((word) => {
-      const testLine = currentLine ? `${currentLine} ${word}` : word
-      const lineWidth = testLine.length * 7 // Approximation for font size 14px
-      if (lineWidth < maxWidth) {
-        currentLine = testLine
-      } else {
-        lines.push(currentLine)
-        currentLine = word
-      }
-    })
-
-    if (currentLine) {
-      lines.push(currentLine)
-    }
-
-    return lines
-  }, [])
-
+  const padding = 10
+  const titleHeight = 30
+  const separatorHeight = LAYOUT.LINE_WIDTH
+  const descriptionStartY = padding + titleHeight + separatorHeight + 10
+  const maxDescriptionHeight = height - descriptionStartY - padding
   const maxTextWidth = width - 2 * padding
 
-  // Memoized description lines calculation
   const descriptionLines = useMemo(() => {
-    const wrappedLines = wrapText(description, maxTextWidth)
-    const maxLines = Math.floor(maxDescriptionHeight / lineHeight)
+    const maxLines = Math.max(
+      0,
+      Math.floor(maxDescriptionHeight / DESCRIPTION_LINE_HEIGHT)
+    )
+    const wrapped = wrapTextInRect(
+      description,
+      maxTextWidth,
+      { fontSize: DESCRIPTION_FONT_SIZE },
+      {
+        maxLines,
+        lineHeight: DESCRIPTION_LINE_HEIGHT,
+      }
+    )
+    if (!wrapped.overflow || wrapped.lines.length === 0) return wrapped.lines
+    // Use U+2026 (single-glyph ellipsis) with no leading space, matching
+    // what `MultilineText` emits when its `maxLines` truncates a line.
+    const withEllipsis = [...wrapped.lines]
+    withEllipsis[withEllipsis.length - 1] =
+      `${withEllipsis[withEllipsis.length - 1].trimEnd()}…`
+    return withEllipsis
+  }, [description, maxTextWidth, maxDescriptionHeight])
 
-    if (wrappedLines.length > maxLines) {
-      const truncatedLines = wrappedLines.slice(0, maxLines)
-      // Add ellipsis to the last line if the text is truncated
-      truncatedLines[truncatedLines.length - 1] += " ..."
-      return truncatedLines
-    }
-
-    return wrappedLines
-  }, [description, maxTextWidth, maxDescriptionHeight, lineHeight, wrapText])
-
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
 
   return (
     <svg
@@ -82,20 +70,20 @@ export const TitleAndDescriptionSVG: React.FC<TitleAndDescriptionSVGProps> = ({
         y={padding / 2}
         width={width - padding}
         height={height - padding}
-        stroke="black"
-        strokeWidth="1"
-        fill="white"
+        stroke="var(--apollon-foreground, #000000)"
+        strokeWidth={LAYOUT.LINE_WIDTH}
+        fill="var(--apollon-background, white)"
       />
 
       {/* Title */}
       <text
         x={width / 2}
         y={padding + titleHeight / 2}
-        fontSize="16"
+        fontSize={TITLE_FONT_SIZE}
         fontWeight="bold"
-        fill="black"
+        fill="var(--apollon-foreground, #000000)"
         textAnchor="middle"
-        alignmentBaseline="middle"
+        dominantBaseline="central"
       >
         {title}
       </text>
@@ -106,8 +94,8 @@ export const TitleAndDescriptionSVG: React.FC<TitleAndDescriptionSVGProps> = ({
         x2={width - padding / 2}
         y1={padding + titleHeight}
         y2={padding + titleHeight}
-        stroke="black"
-        strokeWidth={separatorHeight}
+        stroke="var(--apollon-foreground, #000000)"
+        strokeWidth={LAYOUT.LINE_WIDTH}
       />
 
       {/* Description */}
@@ -115,9 +103,9 @@ export const TitleAndDescriptionSVG: React.FC<TitleAndDescriptionSVGProps> = ({
         <text
           key={index}
           x={padding}
-          y={descriptionStartY + index * lineHeight}
-          fontSize="14"
-          fill="black"
+          y={descriptionStartY + index * DESCRIPTION_LINE_HEIGHT}
+          fontSize={DESCRIPTION_FONT_SIZE}
+          fill="var(--apollon-foreground, #000000)"
           alignmentBaseline="hanging"
         >
           {line}

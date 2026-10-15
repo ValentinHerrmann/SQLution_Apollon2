@@ -5,25 +5,96 @@ on:
     inputs:
       image-tag:
         type: string
-        description: "Image tag to deploy (default: pr-<number> if PR exists, latest for default branch)"
-      
-jobs:  
-  deploy-webapp:
-    uses: ls1intum/.github/.github/workflows/deploy-docker-compose.yml@main
+        required: true
+        description: "Image tag to deploy (e.g., 3.0.1 or sha-abc123)"
+      deploy-app:
+        type: boolean
+        default: true
+        description: (Re-)deploy server + webapp
+      deploy-db:
+        type: boolean
+        default: false
+        description: (Re-)deploy Redis database. Usually not necessary.
+      deploy-proxy:
+        type: boolean
+        default: false
+        description: (Re-)deploy Traefik reverse proxy. Usually not necessary.
+  workflow_call:
+    inputs:
+      image-tag:
+        type: string
+        required: true
+        description: "Image tag to deploy"
+      deploy-app:
+        type: boolean
+        default: true
+        description: (Re-)deploy server + webapp
+      deploy-db:
+        type: boolean
+        default: false
+        description: (Re-)deploy Redis database. Usually not necessary.
+      deploy-proxy:
+        type: boolean
+        default: false
+        description: (Re-)deploy Traefik reverse proxy. Usually not necessary.
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+# The called deploy-docker-compose.yml jobs request contents:read + packages:read
+# (GHCR image existence check). A called reusable workflow cannot request more
+# than its caller grants, so an empty `{}` here fails the run at startup.
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy-db:
+    if: ${{ inputs.deploy-db }}
+    uses: ls1intum/.github/.github/workflows/deploy-docker-compose.yml@5f645f96873d8b8b3a9b2e52d06626c71377f7ac # main
     with:
       environment: Production
-      docker-compose-file: "./docker/compose.webapp.yml"
-      main-image-name: ghcr.io/ls1intum/apollon2/apollon-webapp
+      docker-compose-file: "./docker/compose.db.yml"
+      main-image-name: ls1intum/apollon/server
       image-tag: ${{ inputs.image-tag }}
-      #deployment-base-path: "/opt/apollon2/webapp"
+      deployment-base-path: "/opt/apollon/db"
     secrets: inherit
 
-  deploy-server:
-    uses: ls1intum/.github/.github/workflows/deploy-docker-compose.yml@main
+  deploy-proxy:
+    if: ${{ inputs.deploy-proxy }}
+    uses: ls1intum/.github/.github/workflows/deploy-docker-compose.yml@5f645f96873d8b8b3a9b2e52d06626c71377f7ac # main
     with:
       environment: Production
-      docker-compose-file: "./docker/compose.server.yml"
-      main-image-name: ghcr.io/ls1intum/apollon2/apollon-server
+      docker-compose-file: "./docker/compose.proxy.yml"
+      main-image-name: ls1intum/apollon/server
       image-tag: ${{ inputs.image-tag }}
-      #deployment-base-path: "/opt/apollon2/server"
+      deployment-base-path: "/opt/apollon/proxy"
+    secrets: inherit
+
+  deploy-app:
+    if: ${{ inputs.deploy-app }}
+    uses: ls1intum/.github/.github/workflows/deploy-docker-compose.yml@5f645f96873d8b8b3a9b2e52d06626c71377f7ac # main
+    with:
+      environment: Production
+      docker-compose-file: "./docker/compose.app.yml"
+      main-image-name: ls1intum/apollon/server
+      image-tag: ${{ inputs.image-tag }}
+      deployment-base-path: "/opt/apollon/app"
+    secrets: inherit
+
+  # Publish the matching over-the-air web-bundle update for the mobile app right
+  # after the web app is deployed ("deploy == OTA publish"). Opt-in: only runs
+  # where the ENABLE_LIVE_UPDATE variable is "true", so operators who don't ship
+  # a mobile app are unaffected.
+  publish-live-update:
+    needs: deploy-app
+    if: ${{ inputs.deploy-app && vars.ENABLE_LIVE_UPDATE == 'true' }}
+    uses: ./.github/workflows/ios-live-update.yml
+    with:
+      # Build the OTA bundle from the SAME commit as the deployed image, not from
+      # whatever ref this workflow was dispatched on — otherwise a rollback or a
+      # redeploy of an older `sha-<commit>` tag would ship a web bundle that does
+      # not match the web app that just went live.
+      source-ref: ${{ inputs.image-tag }}
     secrets: inherit

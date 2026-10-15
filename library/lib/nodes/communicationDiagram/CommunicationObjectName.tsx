@@ -1,7 +1,8 @@
-import { NodeProps, NodeResizer, type Node } from "@xyflow/react"
-import { DefaultNodeWrapper } from "@/nodes/wrappers"
+import { NodeProps, type Node } from "@xyflow/react"
+import { usePopoverAnchor } from "@/hooks/usePopoverAnchor"
+import { DefaultNodeWrapper, NodeResizer } from "@/nodes/wrappers"
 import { CommunicationObjectNameSVG } from "@/components"
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo } from "react"
 import { CommunicationObjectNodeProps } from "@/types"
 import { useDiagramStore } from "@/store/context"
 import { useShallow } from "zustand/shallow"
@@ -10,16 +11,9 @@ import {
   calculateMinWidth,
   calculateMinHeight,
 } from "@/utils"
-import {
-  DEFAULT_ATTRIBUTE_HEIGHT,
-  DEFAULT_METHOD_HEIGHT,
-  DEFAULT_PADDING,
-  DEFAULT_FONT,
-  DEFAULT_HEADER_HEIGHT,
-} from "@/constants"
+import { LAYOUT } from "@/constants"
 import { PopoverManager } from "@/components/popovers/PopoverManager"
 import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
-import { useIsOnlyThisElementSelected } from "@/hooks/useIsOnlyThisElementSelected"
 import { NodeToolbar } from "@/components/toolbars/NodeToolbar"
 
 export function CommunicationObjectName({
@@ -34,16 +28,15 @@ export function CommunicationObjectName({
       setNodes: state.setNodes,
     }))
   )
-  const selected = useIsOnlyThisElementSelected(id)
   const isDiagramModifiable = useDiagramModifiable()
-  const communicationObjectSvgWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [anchorEl, anchorRef] = usePopoverAnchor()
 
   // Communication diagrams don't have stereotypes, so header height is consistent
-  const headerHeight = DEFAULT_HEADER_HEIGHT
-  const attributeHeight = DEFAULT_ATTRIBUTE_HEIGHT
-  const methodHeight = DEFAULT_METHOD_HEIGHT
-  const padding = DEFAULT_PADDING
-  const font = DEFAULT_FONT
+  const headerHeight = LAYOUT.DEFAULT_HEADER_HEIGHT
+  const attributeHeight = LAYOUT.DEFAULT_ATTRIBUTE_HEIGHT
+  const methodHeight = LAYOUT.DEFAULT_METHOD_HEIGHT
+  const padding = LAYOUT.DEFAULT_PADDING
+  const font = LAYOUT.DEFAULT_FONT
 
   // Calculate the widest text accurately
   const maxTextWidth = useMemo(() => {
@@ -90,64 +83,63 @@ export function CommunicationObjectName({
 
   useEffect(() => {
     if (height && height <= minHeight) {
-      setNodes((prev) =>
-        prev.map((node) => {
-          if (node.id === id) {
-            return {
-              ...node,
-              height: minHeight,
-              measured: {
-                ...node.measured,
+      setNodes(
+        (prev) =>
+          prev.map((node) => {
+            if (node.id === id) {
+              return {
+                ...node,
                 height: minHeight,
-              },
+                measured: {
+                  ...node.measured,
+                  height: minHeight,
+                },
+              }
             }
-          }
-          return node
-        })
+            return node
+          }),
+        { persist: isDiagramModifiable }
       )
     }
-  }, [minHeight, height, id, setNodes])
+  }, [minHeight, height, id, setNodes, isDiagramModifiable])
 
   useEffect(() => {
     if (width && width <= minWidth) {
-      setNodes((prev) =>
-        prev.map((node) => {
-          if (node.id === id) {
-            return {
-              ...node,
-              width: Math.max(width ?? 0, minWidth),
-              measured: {
+      setNodes(
+        (prev) =>
+          prev.map((node) => {
+            if (node.id === id) {
+              return {
+                ...node,
                 width: Math.max(width ?? 0, minWidth),
-              },
+                measured: {
+                  ...node.measured,
+                  width: Math.max(width ?? 0, minWidth),
+                },
+              }
             }
-          }
-          return node
-        })
+            return node
+          }),
+        { persist: isDiagramModifiable }
       )
     }
-  }, [id, setNodes, minWidth])
+  }, [id, setNodes, minWidth, width, isDiagramModifiable])
 
   const finalWidth = Math.max(width ?? 0, minWidth)
 
   return (
-    <DefaultNodeWrapper
-      width={width}
-      height={height}
-      elementId={id}
-      className="horizontally-not-resizable"
-    >
+    <DefaultNodeWrapper width={width} height={height} elementId={id}>
       <NodeToolbar elementId={id} />
 
       <NodeResizer
         nodeId={id}
-        isVisible={isDiagramModifiable && !!selected}
+        isVisible={isDiagramModifiable}
         minWidth={minWidth}
         minHeight={minHeight}
         maxHeight={minHeight}
-        handleStyle={{ width: 8, height: 8 }}
       />
 
-      <div ref={communicationObjectSvgWrapperRef}>
+      <div ref={anchorRef}>
         <CommunicationObjectNameSVG
           width={finalWidth}
           height={minHeight}
@@ -157,7 +149,7 @@ export function CommunicationObjectName({
         />
       </div>
       <PopoverManager
-        anchorEl={communicationObjectSvgWrapperRef.current}
+        anchorEl={anchorEl}
         elementId={id}
         type={"communicationObjectName" as const}
       />

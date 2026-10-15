@@ -1,17 +1,35 @@
-import { Box, FormControl, Select, MenuItem } from "@mui/material"
-import { EdgeStyleEditor, TextField, Typography } from "@/components/ui"
-import { SwapHorizIcon } from "@/components/Icon"
+import { IconButton, TextField } from "@/components/ui"
+import { EdgeStyleEditor } from "@/components/styleEditor"
+import { ArrowLeftRight } from "lucide-react"
 import { useReactFlow } from "@xyflow/react"
 import { CustomEdgeProps } from "@/edges/EdgeProps"
-import { useEdgePopOver } from "@/hooks"
+import { useEdgePopOver, useReactiveEdge, useReactiveNodeName } from "@/hooks"
 import { PopoverProps } from "../types"
+import { EdgeTypeSelect, EdgeTypeOption } from "./EdgeTypeSelect"
+import { useLabels } from "@/i18n/useLabels"
+import {
+  ConnectionInfo,
+  hasDistinctEndpointNames,
+  PopoverLayout,
+  PopoverSection,
+} from "../PopoverLayout"
 
 export const UseCaseEdgeEditPopover: React.FC<PopoverProps> = ({
   elementId,
 }) => {
-  const { getEdge, getNode, updateEdgeData } = useReactFlow()
+  const t = useLabels()
+  const { updateEdgeData } = useReactFlow()
 
-  const edge = getEdge(elementId)
+  const USE_CASE_EDGE_TYPE_OPTIONS: ReadonlyArray<EdgeTypeOption> = [
+    { value: "UseCaseAssociation", label: t.association },
+    { value: "UseCaseInclude", label: t.include },
+    { value: "UseCaseExtend", label: t.extend },
+    { value: "UseCaseGeneralization", label: t.generalization },
+  ]
+
+  const edge = useReactiveEdge(elementId)
+  const sourceName = useReactiveNodeName(edge?.source, t.source)
+  const targetName = useReactiveNodeName(edge?.target, t.target)
   const { handleEdgeTypeChange, handleLabelChange, handleSwap } =
     useEdgePopOver(elementId)
 
@@ -20,70 +38,54 @@ export const UseCaseEdgeEditPopover: React.FC<PopoverProps> = ({
   }
 
   const edgeData = edge.data as CustomEdgeProps | undefined
-  const sourceNode = getNode(edge.source)
-  const targetNode = getNode(edge.target)
-  const sourceName = (sourceNode?.data?.name as string) ?? "Source"
-  const targetName = (targetNode?.data?.name as string) ?? "Target"
-
-  const useCaseEdgeTypeOptions = [
-    { value: "UseCaseAssociation", label: "Association" },
-    { value: "UseCaseInclude", label: "Include" },
-    { value: "UseCaseExtend", label: "Extend" },
-    { value: "UseCaseGeneralization", label: "Generalization" },
-  ]
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+    <PopoverLayout title={t.edge}>
       <EdgeStyleEditor
         edgeData={edgeData}
         handleDataFieldUpdate={(key, value) =>
           updateEdgeData(elementId, { ...edge.data, [key]: value })
         }
-        label="Edge Type"
+        label={t.style}
         sideElements={[
           handleSwap && (
-            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-              <SwapHorizIcon
-                style={{ cursor: "pointer" }}
-                onClick={handleSwap}
-              />
-            </Box>
+            <IconButton
+              key="swap-source-target"
+              ariaLabel={t.swapSourceTarget}
+              tooltip={t.swapSourceTarget}
+              onClick={handleSwap}
+            >
+              <ArrowLeftRight width={16} height={16} aria-hidden="true" />
+            </IconButton>
           ),
         ]}
       />
 
-      <FormControl fullWidth size="small">
-        <Select
-          labelId="edge-type-label"
-          id="edge-type-select"
+      <PopoverSection divider>
+        <EdgeTypeSelect
           value={edge.type}
-          label="Edge Type"
-          onChange={(e) => handleEdgeTypeChange(e.target.value)}
-        >
-          {useCaseEdgeTypeOptions.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+          options={USE_CASE_EDGE_TYPE_OPTIONS}
+          onChange={handleEdgeTypeChange}
+        />
+      </PopoverSection>
 
-      {/* Connection info */}
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        {sourceName} → {targetName}
-      </Typography>
+      {hasDistinctEndpointNames(sourceName, targetName) && (
+        <PopoverSection title={t.connection} divider>
+          <ConnectionInfo source={sourceName} target={targetName} />
+        </PopoverSection>
+      )}
 
       {/* Show label input only for associations */}
       {edge.type === "UseCaseAssociation" && (
-        <TextField
-          label="Edge Label"
-          value={edgeData?.label ?? ""}
-          onChange={(e) => handleLabelChange(e.target.value)}
-          size="small"
-          fullWidth
-          placeholder="Optional label for association"
-        />
+        <PopoverSection title={t.label} divider>
+          <TextField
+            value={edgeData?.label ?? ""}
+            onChange={(e) => handleLabelChange(e.target.value)}
+            fullWidth
+            placeholder={t.label}
+          />
+        </PopoverSection>
       )}
-    </Box>
+    </PopoverLayout>
   )
 }

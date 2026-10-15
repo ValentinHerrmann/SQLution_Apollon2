@@ -1,4 +1,6 @@
-import { CustomText, StyledRect } from "@/components"
+import { MultilineText, StyledRect } from "@/components"
+import { maxLinesForHeight } from "@/utils/svgTextLayout"
+import { LAYOUT } from "@/constants"
 import { useDiagramStore } from "@/store"
 import { useShallow } from "zustand/shallow"
 import AssessmentIcon from "../../AssessmentIcon"
@@ -15,15 +17,15 @@ export const DeploymentArtifactSVG: React.FC<Props> = ({
   width,
   height,
   svgAttributes,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
   showAssessmentResults = false,
   data,
 }) => {
   const { name } = data
   const assessments = useDiagramStore(useShallow((state) => state.assessments))
   const nodeScore = assessments[id]?.score
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
   const { fillColor, strokeColor, textColor } = getCustomColorsFromData(data)
 
   return (
@@ -48,31 +50,36 @@ export const DeploymentArtifactSVG: React.FC<Props> = ({
         <g transform={`translate(${width - 25}, 7)`}>
           <path
             d="M 0 0 L 13 0 L 19.2 7.25 L 19.2 24 L 0 24 L 0 0 Z"
-            strokeWidth="1.2"
+            strokeWidth={LAYOUT.ICON_LINE_WIDTH}
             strokeMiterlimit="10"
             stroke={strokeColor}
             fill={fillColor}
           ></path>
           <path
             d="M 13 0 L 13 7.25 L 19.2 7.25"
-            strokeWidth="1.2"
+            strokeWidth={LAYOUT.ICON_LINE_WIDTH}
             strokeMiterlimit="10"
             stroke={strokeColor}
             fill="none"
           ></path>
         </g>
 
-        {/* Name Text */}
-        <CustomText
+        {/* Name Text — anchor the first line's center at the original
+            single-line y=25 and grow downward. Max width leaves room for
+            the artifact icon in the top-right corner; max lines are
+            capped to what fits in the node's actual height (single line
+            at the default 50px, more as the user resizes). */}
+        <MultilineText
+          text={name}
           x={width / 2}
           y={25}
-          textAnchor="middle"
+          maxWidth={width - 60}
+          fontSize={LAYOUT.NAME_FONT_SIZE}
           fontWeight="bold"
-          dominantBaseline="middle"
           fill={textColor}
-        >
-          {name}
-        </CustomText>
+          verticalAnchor="top"
+          maxLines={maxLinesForHeight(height - 16, LAYOUT.NAME_LINE_HEIGHT)}
+        />
       </g>
 
       {showAssessmentResults && (

@@ -1,14 +1,16 @@
 import { NodeProps, type Node } from "@xyflow/react"
+import { usePopoverAnchor } from "@/hooks/usePopoverAnchor"
 import { DefaultNodeWrapper } from "../wrappers"
-import { useRef, useMemo, useEffect } from "react"
+import { useMemo, useEffect } from "react"
 import { useDiagramStore } from "@/store/context"
 import { useShallow } from "zustand/shallow"
 import { PopoverManager } from "@/components/popovers/PopoverManager"
 import { DefaultNodeProps } from "@/types"
 import { SfcJumpNodeSVG } from "@/components"
 import { measureTextWidth, calculateMinWidth } from "@/utils"
-import { DEFAULT_PADDING, DEFAULT_FONT } from "@/constants"
+import { LAYOUT } from "@/constants"
 import { NodeToolbar } from "@/components/toolbars/NodeToolbar"
+import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
 
 export function SfcJump({
   id,
@@ -17,7 +19,8 @@ export function SfcJump({
   data,
 }: NodeProps<Node<DefaultNodeProps>>) {
   const { name } = data || {}
-  const svgWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [anchorEl, anchorRef] = usePopoverAnchor()
+  const isDiagramModifiable = useDiagramModifiable()
 
   const { setNodes } = useDiagramStore(
     useShallow((state) => ({
@@ -25,57 +28,62 @@ export function SfcJump({
     }))
   )
 
-  if (!width || !height) {
-    return null
-  }
+  const fixedHeight = 32 // Fixed height for compact appearance
 
-  // Calculate minimum width based on text
   const minWidth = useMemo(() => {
-    const textWidth = measureTextWidth(name || "", DEFAULT_FONT) + 8
-    return calculateMinWidth(textWidth, DEFAULT_PADDING)
+    const textWidth = measureTextWidth(name || "", LAYOUT.DEFAULT_FONT) + 8
+    return calculateMinWidth(textWidth, LAYOUT.DEFAULT_PADDING) + 12
   }, [name])
 
   // Auto-expand/shrink width when text changes
   useEffect(() => {
-    if (width && width !== minWidth) {
-      setNodes((prev) =>
-        prev.map((node) => {
-          if (node.id === id) {
-            return {
-              ...node,
-              width: minWidth,
-              measured: {
-                ...node.measured,
+    if (
+      width &&
+      (width !== minWidth || height !== fixedHeight || isDiagramModifiable)
+    ) {
+      setNodes(
+        (prev) =>
+          prev.map((node) => {
+            if (node.id === id) {
+              return {
+                ...node,
                 width: minWidth,
-              },
+                height: fixedHeight,
+                measured: {
+                  ...node.measured,
+                  width: minWidth,
+                  height: fixedHeight,
+                },
+              }
             }
-          }
-          return node
-        })
+            return node
+          }),
+        { persist: isDiagramModifiable }
       )
     }
-  }, [minWidth, width, id, setNodes])
+  }, [minWidth, width, height, id, setNodes, isDiagramModifiable])
 
-  const finalWidth = Math.max(width ?? 0, minWidth)
+  if (!width || !height) {
+    return null
+  }
+
+  const finalWidth = Math.max(width, minWidth)
+  const finalHeight = fixedHeight
 
   return (
-    <DefaultNodeWrapper width={finalWidth} height={height} elementId={id}>
+    <DefaultNodeWrapper width={finalWidth} height={finalHeight} elementId={id}>
       <NodeToolbar elementId={id} />
 
-      <div ref={svgWrapperRef}>
+      <div ref={anchorRef}>
         <SfcJumpNodeSVG
           width={finalWidth}
-          height={height}
+          height={finalHeight}
           data={data}
           id={id}
         />
       </div>
 
-      <PopoverManager
-        anchorEl={svgWrapperRef.current}
-        elementId={id}
-        type="default"
-      />
+      <PopoverManager anchorEl={anchorEl} elementId={id} type="default" />
     </DefaultNodeWrapper>
   )
 }

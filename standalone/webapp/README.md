@@ -1,50 +1,44 @@
-# React + TypeScript + Vite
+# @tumaet/webapp
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The browser-hosted web app for [Apollon](../../README.md). Wraps the [`@tumaet/apollon`](../../library) library with routing, diagram persistence, sharing, and assessment UI.
 
-Currently, two official plugins are available:
+Part of the Apollon monorepo — run it from the repo root with `pnpm dev`, not from here.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Stack
 
-## Expanding the ESLint configuration
+React 19, TypeScript, Vite, the shadcn-style [`@tumaet/ui`](../../packages/ui) design system (Base UI primitives + Tailwind v4), [TanStack Query](https://tanstack.com/query) for version-history server state, Storybook, Vitest, Playwright (visual + e2e).
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+## Debugging server state
 
-- Configure the top-level `parserOptions` property like this:
+Version history — the list, the immutable snapshot bodies, and the
+create/rename/delete/restore mutations — goes through TanStack Query (see
+[`src/queries`](src/queries) and the boundary note in
+[`src/queryClient.ts`](src/queryClient.ts)). The editor's initial diagram
+body is deliberately NOT a query: it is a one-shot seed that Yjs owns after
+mount, so it must never be refetched or served from a cache — see
+[`src/hooks/useDiagramSeed.ts`](src/hooks/useDiagramSeed.ts).
 
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
-
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+The Query Devtools are **off by default**: their floating button sits
+bottom-right, on top of the editor's minimap, and every other corner is taken
+by the editor's own chrome. Enable them per browser from the console, then
+reload:
 
 ```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
-
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
+localStorage.setItem("apollon:query-devtools", "1")
 ```
+
+They are stripped from production builds regardless.
+
+## Scripts
+
+Common commands (run from the repo root so workspace resolution picks up the library build):
+
+```sh
+pnpm dev                    # Full stack: library watch + server + webapp
+pnpm dev:webapp             # Webapp only (expects library dist/ and server already running)
+pnpm storybook              # Storybook (editor + @tumaet/ui stories) on :6006
+pnpm test:e2e               # Playwright e2e suite
+pnpm build:webapp           # Production bundle into dist/
+```
+
+See the root [README](../../README.md) and the [docs](../../docs) for end-to-end setup, environment variables, and deployment.

@@ -1,64 +1,71 @@
+import type { ReactNode } from "react"
 import {
   appVersion,
-  apollon2RepositoryLink,
   apollonLibraryVersion,
+  releasesLink,
+  repositoryLink,
 } from "@/constants"
-import { useModalContext } from "@/contexts"
-import { Button } from "@mui/material"
-import { Typography } from "../Typography"
+import { Button } from "@tumaet/ui/components/button"
+import { DialogFooter } from "@tumaet/ui/components/dialog"
 
-export const AboutModal = () => {
-  const { closeModal } = useModalContext()
+type AboutModalProps = {
+  /** Called when the user dismisses the modal via the Close button. */
+  onClose: () => void
+}
+
+const npmLink = "https://www.npmjs.com/package/@tumaet/apollon"
+const licenseLink = `${repositoryLink}/blob/main/LICENSE`
+const aetLink = "https://github.com/ls1intum"
+const tumLink = "https://www.tum.de/en/"
+
+const linkClass =
+  "rounded-sm text-primary underline underline-offset-2 transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+
+const ExternalLink = ({
+  href,
+  children,
+}: {
+  href: string
+  children: ReactNode
+}) => (
+  <a href={href} target="_blank" rel="noreferrer" className={linkClass}>
+    {children}
+  </a>
+)
+
+export const AboutModal = ({ onClose }: AboutModalProps) => {
   return (
-    <div className="flex flex-col gap-6">
-      <table>
-        <tr>
-          <td>
-            <Typography>Webapp Version:</Typography>
-          </td>
-          <td>
-            <Typography>
-              <a
-                className="text-blue-500 hover:text-purple-800"
-                href={apollon2RepositoryLink}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Webapp{" "}
-              </a>
-              : {`${appVersion}`}
-            </Typography>
-          </td>
-        </tr>
-        <tr>
-          <td>
-            <Typography>Library Version:</Typography>
-          </td>
-          <td>
-            <Typography>
-              <a
-                className="text-blue-500 hover:text-purple-800"
-                href={apollon2RepositoryLink}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Library{" "}
-              </a>
-              : {`${apollonLibraryVersion}`}
-            </Typography>
-          </td>
-        </tr>
-      </table>
-      <div className="w-full h-[1px] bg-gray-400" />
+    <div className="flex flex-col gap-5 text-sm text-foreground">
+      <p className="leading-relaxed">
+        Apollon is an open-source UML modeling editor built by the{" "}
+        <ExternalLink href={aetLink}>AET team</ExternalLink> at{" "}
+        <ExternalLink href={tumLink}>TUM</ExternalLink>.
+      </p>
 
-      <Button
-        variant="contained"
-        color="primary"
-        onClick={closeModal}
-        className="self-end"
-      >
-        Close
-      </Button>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
+        <dt className="font-medium">App</dt>
+        <dd>
+          <ExternalLink href={repositoryLink}>Apollon</ExternalLink>{" "}
+          {appVersion}
+        </dd>
+        <dt className="font-medium">Library</dt>
+        <dd>
+          <ExternalLink href={npmLink}>@tumaet/apollon</ExternalLink>{" "}
+          {apollonLibraryVersion}
+        </dd>
+      </dl>
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <ExternalLink href={repositoryLink}>GitHub</ExternalLink>
+        <ExternalLink href={releasesLink}>Releases</ExternalLink>
+        <ExternalLink href={licenseLink}>License (MIT)</ExternalLink>
+      </div>
+
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>
+          Close
+        </Button>
+      </DialogFooter>
     </div>
   )
 }

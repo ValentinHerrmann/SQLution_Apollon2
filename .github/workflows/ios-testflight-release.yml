@@ -1,0 +1,305 @@
+name: ios-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      destination:
+        description: Where to publish the build and App Store assets
+        required: true
+        default: testflight
+        type: choice
+        options:
+          - testflight
+          - app-store-assets
+          - app-store
+      submit_for_review:
+        description: Submit the App Store version for review after upload
+        required: true
+        default: false
+        type: boolean
+      build_number:
+        description: Exact processed TestFlight build (required for app-store)
+        required: false
+        type: string
+      screenshot_style:
+        description: Screenshot presentation to upload
+        required: true
+        default: framed
+        type: choice
+        options:
+          - raw
+          - framed
+  workflow_run:
+    workflows: [Release Standalone]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: ios-release-${{ github.event.workflow_run.head_sha || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check whether an iOS build should publish
+    runs-on: ubuntu-latest
+    outputs:
+      destination: ${{ steps.release.outputs.destination }}
+      build-number: ${{ steps.release.outputs.build-number }}
+      publish: ${{ steps.release.outputs.publish }}
+      source-ref: ${{ steps.release.outputs.source-ref }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - name: Resolve release intent
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
+          INPUT_DESTINATION: ${{ inputs.destination }}
+          UPSTREAM_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          UPSTREAM_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          VERSION=$(node -p "require('./standalone/webapp/package.json').version")
+          SOURCE_REF=$(git rev-parse HEAD)
+          {
+            echo "version=$VERSION"
+            echo "source-ref=$SOURCE_REF"
+            echo "build-number=$INPUT_BUILD_NUMBER"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$INPUT_DESTINATION" = "app-store" ] &&
+               ! [[ "$INPUT_BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+              echo "::error::Enter the exact numeric TestFlight build number for App Store preparation."
+              exit 1
+            fi
+            {
+              echo "destination=$INPUT_DESTINATION"
+              echo "publish=true"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "destination=testflight" >> "$GITHUB_OUTPUT"
+          if [ "$UPSTREAM_CONCLUSION" != "success" ]; then
+            echo "::notice::Standalone release did not succeed; skipping TestFlight."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          RELEASE_SHA=$(
+            gh release view "v$VERSION" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json targetCommitish \
+              --jq .targetCommitish 2>/dev/null || true
+          )
+          if [ "$RELEASE_SHA" != "$UPSTREAM_SHA" ]; then
+            echo "::notice::v$VERSION was not released from $UPSTREAM_SHA; skipping TestFlight."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if gh api \
+            "repos/$GITHUB_REPOSITORY/git/ref/tags/ios-testflight@$VERSION" \
+            >/dev/null 2>&1; then
+            echo "::notice::iOS $VERSION is already marked as uploaded to TestFlight."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: check
+    if: needs.check.outputs.publish == 'true'
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.check.outputs.source-ref }}
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: ".nvmrc"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate App Store metadata and public links
+        if: needs.check.outputs.destination != 'testflight'
+        working-directory: standalone/webapp
+        run: pnpm appstore:metadata:validate
+
+      - name: Install Ruby gems (fastlane + cocoapods)
+        working-directory: standalone/webapp
+        run: |
+          eval "$(/opt/homebrew/bin/rbenv init - --no-rehash bash)"
+          bundle install
+          # Persist rbenv shims on PATH so bundle, pod, and fastlane are
+          # resolvable in every subsequent step without re-init.
+          echo "$(rbenv root)/shims" >> "$GITHUB_PATH"
+
+      - name: Build library + web assets
+        run: pnpm run build:lib && pnpm --filter @tumaet/webapp run build
+
+      - name: Add iOS platform (if missing)
+        working-directory: standalone/webapp
+        run: |
+          if [ ! -d "ios" ]; then
+            pnpm capacitor:add:ios
+          fi
+
+      - name: Capacitor sync (iOS)
+        working-directory: standalone/webapp
+        # Bake the live-update signing public key into the app so the updater
+        # strictly rejects any bundle it can't verify. Unset (e.g. forks) → the
+        # feature is simply disabled, not insecure.
+        env:
+          CAPGO_PUBLIC_KEY: ${{ vars.CAPGO_PUBLIC_KEY }}
+          # Fail the build if the signing key is missing rather than shipping
+          # OTA with signature enforcement silently disabled.
+          CAPGO_REQUIRE_SIGNING: "true"
+        run: pnpm exec cap sync ios
+
+      - name: Resolve marketing version and build number
+        if: needs.check.outputs.destination == 'testflight'
+        run: |
+          MARKETING_VERSION=$(node -p "require('./standalone/webapp/package.json').version")
+          echo "MARKETING_VERSION=$MARKETING_VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$(date +'%Y%m%d%H%M')" >> "$GITHUB_ENV"
+
+      - name: Prepare licensed Apple product bezels
+        if: needs.check.outputs.destination != 'testflight' && inputs.screenshot_style == 'framed'
+        working-directory: standalone/webapp
+        run: pnpm run appstore:screenshots:prepare-frames
+
+      - name: Capture iPhone and iPad App Store screenshots
+        if: needs.check.outputs.destination != 'testflight'
+        working-directory: standalone/webapp
+        env:
+          APP_STORE_SCREENSHOT_STYLE: ${{ inputs.screenshot_style }}
+        run: bundle exec fastlane screenshots
+
+      - name: Upload App Store screenshot review
+        if: needs.check.outputs.destination != 'testflight'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ios-app-store-screenshot-review
+          path: |
+            standalone/webapp/fastlane/screenshots/
+            standalone/webapp/fastlane/screenshots-framed/
+            standalone/webapp/fastlane/screenshots-review.html
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build iOS app (Fastlane)
+        if: needs.check.outputs.destination == 'testflight'
+        working-directory: standalone/webapp
+        env:
+          BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
+          MARKETING_VERSION: ${{ env.MARKETING_VERSION }}
+          MATCH_GITLAB_AUTH: ${{ secrets.IOS_MATCH_GITLAB_AUTH }}
+          MATCH_PASSWORD: ${{ secrets.IOS_MATCH_PASSWORD }}
+          MATCH_GIT_URL: ${{ vars.IOS_MATCH_GIT_URL }}
+          API_KEY_ID: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_KEY_ID }}
+          API_KEY_ISSUER_ID: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          API_KEY_PASSWORD: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_PASSWORD }}
+          # The lane rebuilds and re-syncs the web bundle before archiving, so the
+          # signing key must be present here too — otherwise the archived binary
+          # would accept unsigned live updates.
+          CAPGO_PUBLIC_KEY: ${{ vars.CAPGO_PUBLIC_KEY }}
+          CAPGO_REQUIRE_SIGNING: "true"
+        run: bundle exec fastlane build
+
+      - name: Upload to TestFlight (Fastlane)
+        if: needs.check.outputs.destination == 'testflight'
+        working-directory: standalone/webapp
+        env:
+          API_KEY_ID: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_KEY_ID }}
+          API_KEY_ISSUER_ID: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          API_KEY_PASSWORD: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_PASSWORD }}
+        run: bundle exec fastlane release
+
+      - name: Upload App Store metadata and screenshots (Fastlane)
+        if: needs.check.outputs.destination == 'app-store-assets'
+        working-directory: standalone/webapp
+        env:
+          APP_STORE_VERSION: ${{ needs.check.outputs.version }}
+          API_KEY_ID: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_KEY_ID }}
+          API_KEY_ISSUER_ID: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          API_KEY_PASSWORD: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_PASSWORD }}
+          APP_STORE_SCREENSHOT_STYLE: ${{ inputs.screenshot_style }}
+          # Optional: App Review contact. Unset secrets are skipped, leaving the
+          # existing App Store Connect values untouched.
+          APP_REVIEW_FIRST_NAME: ${{ secrets.IOS_APP_REVIEW_FIRST_NAME }}
+          APP_REVIEW_LAST_NAME: ${{ secrets.IOS_APP_REVIEW_LAST_NAME }}
+          APP_REVIEW_EMAIL: ${{ secrets.IOS_APP_REVIEW_EMAIL }}
+          APP_REVIEW_PHONE: ${{ secrets.IOS_APP_REVIEW_PHONE }}
+        run: bundle exec fastlane store_assets
+
+      - name: Prepare App Store version from the tested TestFlight build (Fastlane)
+        if: needs.check.outputs.destination == 'app-store'
+        working-directory: standalone/webapp
+        env:
+          APP_STORE_SCREENSHOT_STYLE: ${{ inputs.screenshot_style }}
+          APP_STORE_VERSION: ${{ needs.check.outputs.version }}
+          BUILD_NUMBER: ${{ needs.check.outputs.build-number }}
+          API_KEY_ID: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_KEY_ID }}
+          API_KEY_ISSUER_ID: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          API_KEY_PASSWORD: ${{ secrets.IOS_APP_STORE_CONNECT_API_KEY_PASSWORD }}
+          SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
+          # Optional: App Review contact. Unset secrets are skipped, leaving the
+          # existing App Store Connect values untouched.
+          APP_REVIEW_FIRST_NAME: ${{ secrets.IOS_APP_REVIEW_FIRST_NAME }}
+          APP_REVIEW_LAST_NAME: ${{ secrets.IOS_APP_REVIEW_LAST_NAME }}
+          APP_REVIEW_EMAIL: ${{ secrets.IOS_APP_REVIEW_EMAIL }}
+          APP_REVIEW_PHONE: ${{ secrets.IOS_APP_REVIEW_PHONE }}
+        run: bundle exec fastlane release_app_store
+
+      - name: Upload IPA artifact
+        if: always() && needs.check.outputs.destination == 'testflight'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ios-ipa
+          path: standalone/webapp/build/*.ipa
+          retention-days: 7
+
+      - name: Mark version as uploaded to TestFlight
+        if: success() && needs.check.outputs.destination == 'testflight'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REF: ${{ needs.check.outputs.source-ref }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          if gh api \
+            "repos/$GITHUB_REPOSITORY/git/ref/tags/ios-testflight@$VERSION" \
+            >/dev/null 2>&1; then
+            echo "::notice::ios-testflight@$VERSION already exists."
+            exit 0
+          fi
+
+          gh api \
+            --method POST \
+            "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/ios-testflight@$VERSION" \
+            -f sha="$SOURCE_REF"

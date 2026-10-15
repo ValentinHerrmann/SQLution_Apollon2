@@ -1,14 +1,18 @@
 import { BaseEdge } from "@xyflow/react"
-import { BaseEdgeProps, CommonEdgeElements } from "../GenericEdge"
+import {
+  BaseEdgeProps,
+  CommonEdgeElements,
+  StraightEdgeControls,
+} from "../GenericEdge"
 import { useStraightPathEdge } from "@/hooks/useStraightPathEdge"
 import { useDiagramStore, usePopoverStore } from "@/store/context"
 import { useShallow } from "zustand/shallow"
 import { useToolbar } from "@/hooks"
-import { useRef } from "react"
-import { EDGE_HIGHTLIGHT_STROKE_WIDTH } from "@/constants"
+import { EDGES } from "@/constants"
 import { FeedbackDropzone } from "@/components/wrapper/FeedbackDropzone"
 import { AssessmentSelectableWrapper } from "@/components/wrapper"
 import { getCustomColorsFromDataForEdge } from "@/utils/layoutUtils"
+import { EdgeInlineMarkers } from "@/components/svgs/edges/InlineMarker"
 
 export const SyntaxTreeEdge = ({
   id,
@@ -25,7 +29,6 @@ export const SyntaxTreeEdge = ({
   targetHandleId,
   data,
 }: BaseEdgeProps) => {
-  const anchorRef = useRef<SVGSVGElement | null>(null)
   const { handleDelete } = useToolbar({ id })
 
   const { assessments } = useDiagramStore(
@@ -46,7 +49,22 @@ export const SyntaxTreeEdge = ({
     markerEnd,
     markerStart,
     strokeDashArray,
+    sourcePoint,
+    targetPoint,
+    sourceNeighbor,
+    targetNeighbor,
+    route,
+    interior,
+    selectedWaypointIndex,
+    sourcePosition: renderSourcePosition,
+    targetPosition: renderTargetPosition,
     isDiagramModifiable,
+    canEditEndpoint,
+    handleEndpointPointerDown,
+    handleWaypointPointerDown,
+    handleGhostPointerDown,
+    handleWaypointDoubleClick,
+    handleWaypointKeyDown,
   } = useStraightPathEdge({
     id,
     type,
@@ -60,6 +78,7 @@ export const SyntaxTreeEdge = ({
     targetPosition,
     sourceHandleId,
     targetHandleId,
+    data,
   })
   const { strokeColor } = getCustomColorsFromDataForEdge(data)
   const markerKey = `${id}-${markerStart ?? "none"}-${markerEnd ?? "none"}`
@@ -72,31 +91,55 @@ export const SyntaxTreeEdge = ({
             key={markerKey}
             id={id}
             path={currentPath}
-            markerEnd={markerEnd}
             pointerEvents="none"
+            // Select/hover ride `.edge-overlay`, not RF's fat interaction ribbon,
+            // so the ribbon can't paint over a neighbour edge's handle. See GenericEdge.
+            interactionWidth={0}
             style={{
               stroke: strokeColor,
               strokeDasharray: strokeDashArray,
             }}
           />
 
+          <EdgeInlineMarkers pathD={currentPath} strokeColor={strokeColor} />
+
           <path
             ref={pathRef}
             className="edge-overlay"
             d={overlayPath}
             fill="none"
-            strokeWidth={EDGE_HIGHTLIGHT_STROKE_WIDTH}
+            strokeWidth={EDGES.EDGE_HIGHLIGHT_STROKE_WIDTH}
             pointerEvents="stroke"
             style={{ opacity: 0.4 }}
+          />
+
+          <StraightEdgeControls
+            route={route}
+            interior={interior}
+            selectedWaypointIndex={selectedWaypointIndex}
+            sourcePoint={sourcePoint}
+            targetPoint={targetPoint}
+            sourcePosition={renderSourcePosition}
+            targetPosition={renderTargetPosition}
+            sourceNeighbor={sourceNeighbor}
+            targetNeighbor={targetNeighbor}
+            isDiagramModifiable={isDiagramModifiable}
+            canEditEndpoint={canEditEndpoint}
+            onEndpointPointerDown={handleEndpointPointerDown}
+            onWaypointPointerDown={handleWaypointPointerDown}
+            onWaypointDoubleClick={handleWaypointDoubleClick}
+            onWaypointKeyDown={handleWaypointKeyDown}
+            onGhostPointerDown={handleGhostPointerDown}
           />
         </g>
 
         <CommonEdgeElements
           id={id}
+          data={data}
           pathMiddlePosition={edgeData.pathMiddlePosition}
+          toolbarPosition={edgeData.toolbarPosition}
           isDiagramModifiable={isDiagramModifiable}
           assessments={assessments}
-          anchorRef={anchorRef}
           handleDelete={handleDelete}
           setPopOverElementId={setPopOverElementId}
           type={type}

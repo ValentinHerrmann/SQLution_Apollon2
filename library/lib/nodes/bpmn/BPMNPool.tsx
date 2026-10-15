@@ -1,10 +1,9 @@
-import { NodeProps, NodeResizer, type Node } from "@xyflow/react"
-import { DefaultNodeWrapper } from "../wrappers"
+import { NodeProps, type Node } from "@xyflow/react"
+import { usePopoverAnchor } from "@/hooks/usePopoverAnchor"
+import { DefaultNodeWrapper, NodeResizer } from "../wrappers"
 import { useHandleOnResize } from "@/hooks"
-import { useRef } from "react"
 import { PopoverManager } from "@/components/popovers/PopoverManager"
 import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
-import { useIsOnlyThisElementSelected } from "@/hooks/useIsOnlyThisElementSelected"
 import { BPMNPoolProps } from "@/types"
 import { BPMNPoolNodeSVG } from "@/components"
 import { NodeToolbar } from "@/components/toolbars/NodeToolbar"
@@ -16,10 +15,9 @@ export function BPMNPool({
   data,
   parentId,
 }: NodeProps<Node<BPMNPoolProps>>) {
-  const svgWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [anchorEl, anchorRef] = usePopoverAnchor()
   const { onResize } = useHandleOnResize(parentId)
   const isDiagramModifiable = useDiagramModifiable()
-  const selected = useIsOnlyThisElementSelected(id)
 
   if (!width || !height) {
     return null
@@ -30,13 +28,12 @@ export function BPMNPool({
       <NodeToolbar elementId={id} />
 
       <NodeResizer
-        isVisible={isDiagramModifiable && !!selected}
+        isVisible={isDiagramModifiable}
         onResize={onResize}
         minHeight={120}
         minWidth={200}
-        handleStyle={{ width: 8, height: 8 }}
       />
-      <div ref={svgWrapperRef}>
+      <div ref={anchorRef}>
         <BPMNPoolNodeSVG
           width={width}
           height={height}
@@ -45,11 +42,7 @@ export function BPMNPool({
           showAssessmentResults={!isDiagramModifiable}
         />
       </div>
-      <PopoverManager
-        anchorEl={svgWrapperRef.current}
-        elementId={id}
-        type="BPMNPool"
-      />
+      <PopoverManager anchorEl={anchorEl} elementId={id} type="BPMNPool" />
     </DefaultNodeWrapper>
   )
 }

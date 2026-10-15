@@ -1,12 +1,15 @@
-import { DividerLine, NodeStyleEditor } from "@/components/ui"
+import { NodeStyleEditor } from "@/components/styleEditor"
 import { useDiagramStore } from "@/store"
 import { ObjectNodeProps } from "@/types"
 import { useShallow } from "zustand/shallow"
 import { EditableAttributeList } from "../classDiagram/EditableAttributesList"
 import { EditableMethodsList } from "../classDiagram/EditableMethodsList"
 import { PopoverProps } from "../types"
+import { useLabels } from "@/i18n/useLabels"
+import { PopoverLayout, PopoverSection } from "../PopoverLayout"
 
 export const ObjectEditPopover: React.FC<PopoverProps> = ({ elementId }) => {
+  const t = useLabels()
   const { nodes, setNodes } = useDiagramStore(
     useShallow((state) => ({
       nodes: state.nodes,
@@ -39,15 +42,18 @@ export const ObjectEditPopover: React.FC<PopoverProps> = ({ elementId }) => {
   }
 
   return (
-    <>
+    <PopoverLayout title={t.object}>
       <NodeStyleEditor
         nodeData={nodeData}
+        colorEditorLabel={t.objectWord}
         handleDataFieldUpdate={handleDataFieldUpdate}
       />
-      <DividerLine width="100%" />
-      <EditableAttributeList nodeId={elementId} />
-      <DividerLine width="100%" />
-      <EditableMethodsList nodeId={elementId} />
-    </>
+      <PopoverSection divider>
+        <EditableAttributeList nodeId={elementId} />
+      </PopoverSection>
+      <PopoverSection divider>
+        <EditableMethodsList nodeId={elementId} />
+      </PopoverSection>
+    </PopoverLayout>
   )
 }

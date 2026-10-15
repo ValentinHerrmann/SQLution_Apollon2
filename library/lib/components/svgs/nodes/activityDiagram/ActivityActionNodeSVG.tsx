@@ -1,10 +1,12 @@
-import { CustomText, StyledRect } from "@/components"
+import { LAYOUT } from "@/constants"
+import { MultilineText, StyledRect } from "@/components"
 import { useDiagramStore } from "@/store"
 import { useShallow } from "zustand/shallow"
 import AssessmentIcon from "../../AssessmentIcon"
 import { SVGComponentProps } from "@/types/SVG"
 import { DefaultNodeProps } from "@/types"
 import { getCustomColorsFromData } from "@/utils/layoutUtils"
+import { maxLinesForHeight } from "@/utils/svgTextLayout"
 
 export type ActivityActionNodeSVGProps = SVGComponentProps & {
   data: DefaultNodeProps
@@ -16,14 +18,14 @@ export const ActivityActionNodeSVG: React.FC<ActivityActionNodeSVGProps> = ({
   height,
   data,
   svgAttributes,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
   showAssessmentResults = false,
 }) => {
   const { name } = data
   const assessments = useDiagramStore(useShallow((state) => state.assessments))
   const nodeScore = assessments[id]?.score
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
 
   const { fillColor, strokeColor, textColor } = getCustomColorsFromData(data)
   return (
@@ -47,15 +49,16 @@ export const ActivityActionNodeSVG: React.FC<ActivityActionNodeSVGProps> = ({
         />
 
         {/* Name Text */}
-        <CustomText
+        <MultilineText
+          text={name}
           x={width / 2}
           y={height / 2}
-          textAnchor="middle"
+          maxWidth={width - 16}
+          fontSize={LAYOUT.NAME_FONT_SIZE}
           fontWeight="bold"
           fill={textColor}
-        >
-          {name}
-        </CustomText>
+          maxLines={maxLinesForHeight(height - 16, LAYOUT.NAME_LINE_HEIGHT)}
+        />
       </g>
 
       {showAssessmentResults && (

@@ -1,48 +1,177 @@
 {
   "name": "@tumaet/apollon",
-  "version": "4.2.5",
+  "version": "5.4.0",
+  "description": "Embeddable UML modeling editor. Mounts into any DOM node — works inside Angular, Vue, Svelte, vanilla JS, or React hosts.",
+  "keywords": [
+    "uml",
+    "uml-editor",
+    "diagram-editor",
+    "react",
+    "angular",
+    "yjs"
+  ],
+  "homepage": "https://github.com/ls1intum/Apollon#readme",
+  "bugs": {
+    "url": "https://github.com/ls1intum/Apollon/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ls1intum/Apollon.git",
+    "directory": "library"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "TUM Applied Education Technologies",
+    "url": "https://aet.cit.tum.de/"
+  },
+  "funding": "https://github.com/ls1intum/Apollon",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "source": "lib/index.tsx",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "dist"
+    "dist",
+    "schema"
   ],
   "sideEffects": [
     "**/*.css"
   ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./internals": {
+      "types": "./dist/internals.d.ts",
+      "import": "./dist/internals.js"
+    },
+    "./export": {
+      "types": "./dist/export.d.ts",
+      "import": "./dist/export.js"
+    },
+    "./model": {
+      "types": "./dist/model.d.ts",
+      "import": "./dist/model.js"
+    },
+    "./style.css": "./dist/assets/style.css",
+    "./schema": "./schema/uml-model-4.schema.json",
+    "./package.json": "./package.json"
+  },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "build:watch": "tsc -b --watch & vite build --watch",
+    "dev": "pnpm --filter @tumaet/ui run build && vite",
+    "build": "pnpm --filter @tumaet/ui run build && tsc -b && vite build",
+    "build:watch": "pnpm exec concurrently -k \"pnpm --filter @tumaet/ui run build:css:watch\" \"pnpm --filter @tumaet/ui run build:types:watch\" \"tsc -b --watch\" \"vite build --watch\"",
     "preview": "vite preview",
     "lint": "eslint .",
-    "lint:fix": "eslint --fix ."
+    "lint:fix": "eslint --fix .",
+    "test": "pnpm --filter @tumaet/ui run build:css && vitest run",
+    "test:watch": "pnpm --filter @tumaet/ui run build:css && vitest",
+    "test:coverage": "pnpm --filter @tumaet/ui run build:css && vitest run --coverage",
+    "size": "size-limit",
+    "gen:fonts": "node scripts/gen-fonts.mjs",
+    "gen:schema": "node scripts/gen-schema.mjs"
+  },
+  "size-limit": [
+    {
+      "name": "main entry (published JS, deps externalized)",
+      "path": "dist/index.js",
+      "limit": "123 kB",
+      "disablePlugins": [
+        "@size-limit/webpack",
+        "@size-limit/time"
+      ]
+    },
+    {
+      "name": "edge-routing Worker (loaded for large diagrams)",
+      "path": "dist/assets/edgeGeometry.worker-*.js",
+      "limit": "40 kB",
+      "disablePlugins": [
+        "@size-limit/webpack",
+        "@size-limit/time"
+      ]
+    },
+    {
+      "name": "/model DOM-free entry and shared chunks",
+      "path": [
+        "dist/model*.js",
+        "dist/ydoc-*.js",
+        "dist/persistedShape-*.js"
+      ],
+      "limit": "8 kB",
+      "disablePlugins": [
+        "@size-limit/webpack",
+        "@size-limit/time"
+      ]
+    },
+    {
+      "name": "/export lazy chunk (published JS, renderers externalized)",
+      "path": "dist/export.js",
+      "limit": "700 kB",
+      "disablePlugins": [
+        "@size-limit/webpack",
+        "@size-limit/time"
+      ]
+    }
+  ],
+  "peerDependencies": {
+    "@xyflow/react": "^12.11.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.0"
   },
   "dependencies": {
-    "@emotion/react": "11.11.1",
-    "@emotion/styled": "11.11.0",
-    "@mui/material": "6.4.2",
-    "@types/node": "22.13.8",
-    "@xyflow/react": "12.3.6",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "uuid": "11.0.3",
-    "zustand": "5.0.3",
-    "yjs": "13.6.20"
+    "@base-ui/react": "catalog:",
+    "@chenglou/pretext": "0.0.9",
+    "@dnd-kit/core": "6.3.1",
+    "@dnd-kit/sortable": "10.0.0",
+    "@dnd-kit/utilities": "3.2.2",
+    "@xyflow/system": "catalog:",
+    "lucide-react": "catalog:",
+    "zustand": "catalog:"
+  },
+  "optionalDependencies": {
+    "@resvg/resvg-wasm": "catalog:",
+    "jspdf": "catalog:",
+    "svg2pdf.js": "catalog:"
   },
   "devDependencies": {
-    "@eslint/js": "9.17.0",
-    "@vitejs/plugin-react": "4.3.4",
-    "eslint": "9.17.0",
-    "eslint-plugin-react": "7.37.2",
-    "globals": "15.13.0",
-    "typescript": "5.7.2",
-    "typescript-eslint": "8.18.1",
-    "vite": "6.3.4",
-    "vite-plugin-dts": "4.3.0"
+    "@eslint-react/eslint-plugin": "catalog:",
+    "@eslint/js": "catalog:",
+    "@microsoft/api-extractor": "7.59.3",
+    "@size-limit/preset-big-lib": "catalog:",
+    "@testing-library/jest-dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@tumaet/ui": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "@xyflow/react": "catalog:",
+    "ajv": "8.20.0",
+    "babel-plugin-react-compiler": "catalog:",
+    "eslint": "catalog:",
+    "eslint-plugin-react-hooks": "catalog:",
+    "fast-check": "catalog:",
+    "globals": "catalog:",
+    "jsdom": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "size-limit": "catalog:",
+    "subset-font": "2.9.0",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
+    "typescript-json-schema": "0.68.0",
+    "vite": "catalog:",
+    "vite-plugin-dts": "5.1.2",
+    "vitest": "catalog:",
+    "y-protocols": "catalog:",
+    "yjs": "catalog:"
   }
 }

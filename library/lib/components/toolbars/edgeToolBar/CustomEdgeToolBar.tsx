@@ -1,17 +1,24 @@
-import { DeleteIcon, EditIcon } from "@/components/Icon"
-import { ZINDEX_TOOLTIP } from "@/constants/zindexConstants"
+import { EdgeToolbar } from "@xyflow/react"
+import { Pencil, RotateCcw, Trash2 } from "lucide-react"
+import { ZINDEX } from "@/constants"
 import { IPoint } from "@/edges"
 import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
 import { useIsOnlyThisElementSelected } from "@/hooks/useIsOnlyThisElementSelected"
-import { Box } from "@mui/material"
-import { useMemo } from "react"
+import { useLabels } from "@/i18n/useLabels"
+import { ButtonGroup, IconButton } from "@/components/ui"
+
+/** Pixels the toolbar is nudged down-right of the edge label anchor so it clears
+ * the edge path and its endpoint grips instead of sitting on top of them. */
+const EDGE_TOOLBAR_OFFSET_PX = 20
 
 interface CustomEdgeToolbarProps {
   edgeId: string
   position: IPoint
   onEditClick: (event: React.MouseEvent<HTMLElement>) => void
   onDeleteClick: (event: React.MouseEvent<HTMLElement>) => void
-  anchorRef: React.RefObject<SVGForeignObjectElement>
+  onResetRoutingClick?: (event: React.MouseEvent<HTMLElement>) => void
+  canResetRouting?: boolean
+  anchorRef: React.Ref<HTMLDivElement>
 }
 
 export const CustomEdgeToolbar: React.FC<CustomEdgeToolbarProps> = ({
@@ -19,87 +26,70 @@ export const CustomEdgeToolbar: React.FC<CustomEdgeToolbarProps> = ({
   position,
   onEditClick,
   onDeleteClick,
+  onResetRoutingClick,
+  canResetRouting = false,
   anchorRef,
 }) => {
+  const t = useLabels()
+  const isSelected = useIsOnlyThisElementSelected(edgeId)
   const isDiagramModifiable = useDiagramModifiable()
-  const selected = useIsOnlyThisElementSelected(edgeId)
-
-  const showToolbar = useMemo(() => {
-    return selected && isDiagramModifiable
-  }, [selected, isDiagramModifiable])
-
-  const toolbarPosition = useMemo(() => {
-    return {
-      x: position.x - 16,
-      y: position.y - 28,
-    }
-  }, [position.x, position.y, edgeId])
+  const isVisible = isSelected && isDiagramModifiable
+  const showResetRouting = Boolean(canResetRouting && onResetRoutingClick)
 
   return (
-    <foreignObject
-      ref={anchorRef}
-      width={32}
-      height={56}
-      x={toolbarPosition.x + 20}
-      y={toolbarPosition.y + 20}
+    <EdgeToolbar
+      edgeId={edgeId}
+      x={position.x + EDGE_TOOLBAR_OFFSET_PX}
+      y={position.y + EDGE_TOOLBAR_OFFSET_PX}
+      isVisible
+      className="apollon-element-toolbar-host"
+      style={{
+        zIndex: ZINDEX.TOOLTIP,
+        pointerEvents: "none",
+      }}
     >
-      {showToolbar && (
-        <Box
-          sx={{
-            backgroundColor: "var(--apollon2-background)",
-            boxShadow: "0 0 4px 0 var(--apollon2-background-variant)",
-            borderRadius: "8px",
-            padding: "8px",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            cursor: "pointer",
-            gap: "8px",
-            width: "100%",
-            height: "100%",
-            boxSizing: "border-box",
-            WebkitTransform: "translateZ(0)",
-            transform: "translateZ(0)",
-            position: "relative",
-            zIndex: ZINDEX_TOOLTIP,
-          }}
-        >
-          <Box
-            sx={{
-              width: "16px",
-              height: "16px",
-              backgroundColor: "var(--apollon2-background)",
-              borderRadius: 1,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-            onClick={(e) => {
-              e.stopPropagation()
-              onDeleteClick(e)
-            }}
+      <div ref={anchorRef}>
+        {isVisible && (
+          <ButtonGroup
+            aria-label={t.selectionActions}
+            orientation="vertical"
+            className="apollon-element-toolbar nodrag nopan"
           >
-            <DeleteIcon style={{ width: 16, height: 16 }} />
-          </Box>
-          <Box
-            sx={{
-              width: "16px",
-              height: "16px",
-              backgroundColor: "var(--apollon2-background)",
-              borderRadius: 1,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-            onClick={(e) => {
-              e.stopPropagation()
-              onEditClick(e)
-            }}
-          >
-            <EditIcon style={{ width: 16, height: 16 }} />
-          </Box>
-        </Box>
-      )}
-    </foreignObject>
+            <IconButton
+              ariaLabel={t.deleteEdge}
+              tooltip={t.deleteEdge}
+              onClick={(event) => {
+                event.stopPropagation()
+                onDeleteClick(event)
+              }}
+            >
+              <Trash2 width={16} height={16} aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              ariaLabel={t.editEdge}
+              tooltip={t.editEdge}
+              onClick={(event) => {
+                event.stopPropagation()
+                onEditClick(event)
+              }}
+            >
+              <Pencil width={16} height={16} aria-hidden="true" />
+            </IconButton>
+            {showResetRouting && (
+              <IconButton
+                ariaLabel={t.resetEdgeRouting}
+                tooltip={t.resetEdgeRouting}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onResetRoutingClick?.(event)
+                }}
+              >
+                <RotateCcw width={16} height={16} aria-hidden="true" />
+              </IconButton>
+            )}
+          </ButtonGroup>
+        )}
+      </div>
+    </EdgeToolbar>
   )
 }

@@ -1,40 +1,19 @@
-import { BaseEdge } from "@xyflow/react"
-import {
-  BaseEdgeProps,
-  EdgeEndpointMarkers,
-  CommonEdgeElements,
-} from "../GenericEdge"
+import { BaseEdgeProps, StepEdgeBody, CommonEdgeElements } from "../GenericEdge"
 import { useDiagramStore, usePopoverStore } from "@/store/context"
 import { useShallow } from "zustand/shallow"
-import { Position } from "@xyflow/react"
 import { useEdgeConfig } from "@/hooks/useEdgeConfig"
 import { useStepPathEdge } from "@/hooks/useStepPathEdge"
 import { useToolbar } from "@/hooks"
-import { useRef } from "react"
-import { EDGE_HIGHTLIGHT_STROKE_WIDTH } from "@/constants"
 import { FeedbackDropzone } from "@/components/wrapper/FeedbackDropzone"
 import { AssessmentSelectableWrapper } from "@/components"
 import { getCustomColorsFromDataForEdge } from "@/utils/layoutUtils"
+import { useRequiredInterfaceEdgeType } from "@/hooks/useRequiredInterfaceEdgeType"
 
-const arePositionsOpposite = (pos1: Position, pos2: Position): boolean => {
-  return (
-    (pos1 === Position.Left && pos2 === Position.Right) ||
-    (pos1 === Position.Right && pos2 === Position.Left) ||
-    (pos1 === Position.Top && pos2 === Position.Bottom) ||
-    (pos1 === Position.Bottom && pos2 === Position.Top)
-  )
-}
-
-const getPositionFromHandleId = (handleId: string | null): Position => {
-  if (!handleId) return Position.Right // default
-
-  if (handleId.includes("left")) return Position.Left
-  if (handleId.includes("right")) return Position.Right
-  if (handleId.includes("top")) return Position.Top
-  if (handleId.includes("bottom")) return Position.Bottom
-
-  return Position.Right
-}
+const COMPONENT_REQUIRED_INTERFACE_TYPES = [
+  "ComponentRequiredInterface",
+  "ComponentRequiredQuarterInterface",
+  "ComponentRequiredThreeQuarterInterface",
+] as const
 
 export const ComponentDiagramEdge = ({
   id,
@@ -51,7 +30,6 @@ export const ComponentDiagramEdge = ({
   targetHandleId,
   data,
 }: BaseEdgeProps) => {
-  const anchorRef = useRef<SVGSVGElement | null>(null)
   const { handleDelete } = useToolbar({ id })
 
   const config = useEdgeConfig(
@@ -63,72 +41,39 @@ export const ComponentDiagramEdge = ({
       | "ComponentRequiredQuarterInterface"
   )
 
-  // For component edges, config has allowMidpointDragging
   const allowMidpointDragging =
     "allowMidpointDragging" in config ? config.allowMidpointDragging : true
 
-  const { edges, assessments } = useDiagramStore(
-    useShallow((state) => ({
-      edges: state.edges,
-      assessments: state.assessments,
-    }))
-  )
+  const assessments = useDiagramStore(useShallow((state) => state.assessments))
 
   const setPopOverElementId = usePopoverStore(
     useShallow((state) => state.setPopOverElementId)
   )
 
-  const dynamicEdgeType = (() => {
-    if (type !== "ComponentRequiredInterface") {
-      return type
-    }
-
-    const currentRequiredInterfaces = edges.filter(
-      (edge) =>
-        edge.target === target && edge.type === "ComponentRequiredInterface"
-    )
-
-    const currentAllInterfaces = edges.filter(
-      (edge) =>
-        edge.target === target &&
-        (edge.type === "ComponentRequiredInterface" ||
-          edge.type === "ComponentProvidedInterface")
-    )
-
-    const currentTargetPosition = getPositionFromHandleId(targetHandleId!)
-    const hasOppositeRequiredInterface = currentRequiredInterfaces
-      .filter((edge) => edge.id !== id)
-      .some((otherEdge) => {
-        const otherPosition = getPositionFromHandleId(otherEdge.targetHandle!)
-        return arePositionsOpposite(currentTargetPosition, otherPosition)
-      })
-
-    switch (currentRequiredInterfaces.length) {
-      case 1:
-        if (currentAllInterfaces.length === currentRequiredInterfaces.length) {
-          return "ComponentRequiredInterface"
-        } else {
-          return "ComponentRequiredThreeQuarterInterface"
-        }
-      case 2:
-        if (hasOppositeRequiredInterface) {
-          return "ComponentRequiredThreeQuarterInterface"
-        } else {
-          return "ComponentRequiredQuarterInterface"
-        }
-      default:
-        return "ComponentRequiredQuarterInterface"
-    }
-  })()
+  const dynamicEdgeType = useRequiredInterfaceEdgeType({
+    type,
+    id,
+    target,
+    targetHandleId,
+    requiredTypes: COMPONENT_REQUIRED_INTERFACE_TYPES,
+    defaultType: "ComponentRequiredInterface",
+    reducedType: "ComponentRequiredQuarterInterface",
+  })
+  const detachedTargetMarkerType = COMPONENT_REQUIRED_INTERFACE_TYPES.some(
+    (requiredType) => requiredType === type
+  )
+    ? "ComponentRequiredInterface"
+    : undefined
 
   const {
     pathRef,
     edgeData,
     currentPath,
     overlayPath,
-    midpoints,
+    bendHandles,
+    isBendDragging,
+    draggingHandleSegmentIndex,
     hasInitialCalculation,
-    isReconnectingRef,
     markerEnd,
     markerStart,
     strokeDashArray,
@@ -136,7 +81,11 @@ export const ComponentDiagramEdge = ({
     handleEndpointPointerDown,
     sourcePoint,
     targetPoint,
+    sourcePosition: renderSourcePosition,
+    targetPosition: renderTargetPosition,
     isDiagramModifiable,
+    canEditEndpoint,
+    targetInterfaceGeometry,
   } = useStepPathEdge({
     id,
     type: dynamicEdgeType,
@@ -152,8 +101,7 @@ export const ComponentDiagramEdge = ({
     targetHandleId,
     data,
     allowMidpointDragging,
-    enableReconnection: true,
-    enableStraightPath: false,
+    detachedTargetMarkerType,
   })
 
   const { strokeColor } = getCustomColorsFromDataForEdge(data)
@@ -162,72 +110,39 @@ export const ComponentDiagramEdge = ({
   return (
     <AssessmentSelectableWrapper elementId={id} asElement="g">
       <FeedbackDropzone elementId={id} asElement="path" elementType={type}>
-        <g className="edge-container">
-          <BaseEdge
-            key={markerKey}
-            id={id}
-            path={currentPath}
-            markerEnd={isReconnectingRef.current ? undefined : markerEnd}
-            pointerEvents="none"
-            style={{
-              stroke: strokeColor,
-              strokeDasharray: isReconnectingRef.current
-                ? "none"
-                : strokeDashArray,
-              transition: hasInitialCalculation
-                ? "opacity 0.1s ease-in"
-                : "none",
-              opacity: 1,
-            }}
-          />
-
-          <path
-            ref={pathRef}
-            className="edge-overlay"
-            d={overlayPath}
-            fill="none"
-            strokeWidth={EDGE_HIGHTLIGHT_STROKE_WIDTH}
-            pointerEvents="stroke"
-            style={{
-              opacity: isReconnectingRef.current ? 0 : 0.4,
-            }}
-          />
-
-          <EdgeEndpointMarkers
-            sourcePoint={sourcePoint}
-            targetPoint={targetPoint}
-            isDiagramModifiable={isDiagramModifiable}
-            diagramType="step"
-            pathType="step"
-            onSourcePointerDown={(e) => handleEndpointPointerDown(e, "source")}
-            onTargetPointerDown={(e) => handleEndpointPointerDown(e, "target")}
-          />
-
-          {isDiagramModifiable &&
-            !isReconnectingRef.current &&
-            allowMidpointDragging &&
-            midpoints.map((point, midPointIndex) => (
-              <circle
-                className="edge-circle"
-                pointerEvents="all"
-                key={`${id}-midpoint-${midPointIndex}`}
-                cx={point.x}
-                cy={point.y}
-                r={10}
-                fill="lightgray"
-                stroke="none"
-                style={{ cursor: "grab", zIndex: 9999 }}
-                onPointerDown={(e) => handlePointerDown(e, midPointIndex)}
-              />
-            ))}
-        </g>
+        <StepEdgeBody
+          id={id}
+          markerKey={markerKey}
+          currentPath={currentPath}
+          overlayPath={overlayPath}
+          pathRef={pathRef}
+          strokeColor={strokeColor}
+          strokeDashArray={strokeDashArray}
+          hasInitialCalculation={hasInitialCalculation}
+          isBendDragging={isBendDragging}
+          draggingHandleSegmentIndex={draggingHandleSegmentIndex}
+          markerStart={markerStart}
+          markerEnd={markerEnd}
+          targetInterfaceGeometry={targetInterfaceGeometry}
+          sourcePoint={sourcePoint}
+          targetPoint={targetPoint}
+          sourcePosition={renderSourcePosition}
+          targetPosition={renderTargetPosition}
+          isDiagramModifiable={isDiagramModifiable}
+          canEditEndpoint={canEditEndpoint}
+          allowMidpointDragging={allowMidpointDragging}
+          bendHandles={bendHandles}
+          handleEndpointPointerDown={handleEndpointPointerDown}
+          handlePointerDown={handlePointerDown}
+        />
 
         <CommonEdgeElements
           id={id}
+          data={data}
           pathMiddlePosition={edgeData.pathMiddlePosition}
+          toolbarPosition={edgeData.toolbarPosition}
           isDiagramModifiable={isDiagramModifiable}
           assessments={assessments}
-          anchorRef={anchorRef}
           handleDelete={handleDelete}
           setPopOverElementId={setPopOverElementId}
           type={dynamicEdgeType}

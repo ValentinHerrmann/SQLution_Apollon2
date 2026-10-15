@@ -1,0 +1,46 @@
+name: Verify changesets
+
+# Advisory only: reminds authors when a user-visible change ships without a
+# changeset. It never blocks merge — a maintainer can always add the changeset
+# in a follow-up, and docs-/CI-/refactor-only PRs legitimately have none.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-changesets-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Forks can't fetch origin/<base> for the diff; skip rather than fail.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Changesets status (advisory)
+        # Surface the result in the job summary — base.ref via env, never
+        # interpolated into the shell. changeset writes the "no changesets
+        # were found" reminder to stderr, so fold stderr in and keep the
+        # pipeline's real exit code with pipefail.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -o pipefail
+          pnpm exec changeset status --since="origin/$BASE_REF" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+        continue-on-error: true

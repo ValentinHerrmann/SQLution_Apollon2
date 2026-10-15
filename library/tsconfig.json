@@ -13,6 +13,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    "stripInternal": true,
     "jsx": "react-jsx",
     "types": ["vite/client"],
 
@@ -22,9 +23,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["lib/*"]
+      "@/*": ["./lib/*"]
     }
   },
   "include": ["lib/**/*"],

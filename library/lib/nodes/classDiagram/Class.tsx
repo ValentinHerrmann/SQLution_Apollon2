@@ -1,7 +1,8 @@
-import { NodeProps, NodeResizer, type Node } from "@xyflow/react"
-import { DefaultNodeWrapper } from "@/nodes/wrappers"
+import { NodeProps, type Node } from "@xyflow/react"
+import { usePopoverAnchor } from "@/hooks/usePopoverAnchor"
+import { DefaultNodeWrapper, NodeResizer } from "@/nodes/wrappers"
 import { ClassSVG } from "@/components"
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo } from "react"
 import { ClassNodeProps } from "@/types"
 import { useDiagramStore } from "@/store/context"
 import { useShallow } from "zustand/shallow"
@@ -9,18 +10,11 @@ import {
   measureTextWidth,
   calculateMinWidth,
   calculateMinHeight,
+  stereotypeLabel,
 } from "@/utils"
-import {
-  DEFAULT_ATTRIBUTE_HEIGHT,
-  DEFAULT_METHOD_HEIGHT,
-  DEFAULT_PADDING,
-  DEFAULT_FONT,
-  DEFAULT_HEADER_HEIGHT,
-  DEFAULT_HEADER_HEIGHT_WITH_STREOTYPE,
-} from "@/constants"
+import { LAYOUT } from "@/constants"
 import { PopoverManager } from "@/components/popovers/PopoverManager"
 import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
-import { useIsOnlyThisElementSelected } from "@/hooks/useIsOnlyThisElementSelected"
 import { NodeToolbar } from "@/components/toolbars/NodeToolbar"
 
 export function Class({
@@ -34,34 +28,36 @@ export function Class({
       setNodes: state.setNodes,
     }))
   )
-  const { name, stereotype, attributes, methods } = data
+  const { name, stereotype, isAbstract, attributes, methods } = data
 
-  const selected = useIsOnlyThisElementSelected(id)
   const isDiagramModifiable = useDiagramModifiable()
 
-  const classSvgWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [anchorEl, anchorRef] = usePopoverAnchor()
 
   const showStereotype = !!stereotype
   const headerHeight = showStereotype
-    ? DEFAULT_HEADER_HEIGHT_WITH_STREOTYPE
-    : DEFAULT_HEADER_HEIGHT
+    ? LAYOUT.DEFAULT_HEADER_HEIGHT_WITH_STEREOTYPE
+    : LAYOUT.DEFAULT_HEADER_HEIGHT
 
-  const attributeHeight = DEFAULT_ATTRIBUTE_HEIGHT
-  const methodHeight = DEFAULT_METHOD_HEIGHT
-  const padding = DEFAULT_PADDING
-  const font = DEFAULT_FONT
+  const attributeHeight = LAYOUT.DEFAULT_ATTRIBUTE_HEIGHT
+  const methodHeight = LAYOUT.DEFAULT_METHOD_HEIGHT
+  const padding = LAYOUT.DEFAULT_PADDING
+  const font = LAYOUT.DEFAULT_FONT
+  // Italic advance widths differ from upright, so abstract text must be measured
+  // italic too or the box mis-sizes (the measured==rendered invariant, fontStack.ts).
+  const italicFont = `italic ${font}`
 
   // Calculate the widest text accurately
   const maxTextWidth = useMemo(() => {
     const headerTextWidths = [
-      stereotype ? measureTextWidth(`«${stereotype}»`, font) : 0,
-      measureTextWidth(name, font),
+      stereotype ? measureTextWidth(stereotypeLabel(stereotype), font) : 0,
+      measureTextWidth(name, isAbstract ? italicFont : font),
     ]
     const attributesTextWidths = attributes.map((attr) =>
       measureTextWidth(attr.name, font)
     )
     const methodsTextWidths = methods.map((method) =>
-      measureTextWidth(method.name, font)
+      measureTextWidth(method.name, method.isAbstract ? italicFont : font)
     )
     const allTextWidths = [
       ...headerTextWidths,
@@ -71,7 +67,7 @@ export function Class({
 
     const result = Math.max(...allTextWidths, 0)
     return result
-  }, [stereotype, name, attributes, methods, font])
+  }, [stereotype, name, isAbstract, attributes, methods, font, italicFont])
 
   const minWidth = useMemo(() => {
     const result = calculateMinWidth(maxTextWidth, padding)
@@ -98,68 +94,66 @@ export function Class({
   )
 
   useEffect(() => {
-    if (!height || height !== minHeight) {
-      setNodes((prev) =>
-        prev.map((node) => {
-          if (node.id === id) {
-            return {
-              ...node,
-              height: minHeight,
-              measured: {
-                ...node.measured,
+    if (height && height <= minHeight) {
+      setNodes(
+        (prev) =>
+          prev.map((node) => {
+            if (node.id === id) {
+              return {
+                ...node,
                 height: minHeight,
-              },
+                measured: {
+                  ...node.measured,
+                  height: minHeight,
+                },
+              }
             }
-          }
-          return node
-        })
+            return node
+          }),
+        { persist: isDiagramModifiable }
       )
     }
-  }, [minHeight, height, id, setNodes])
+  }, [minHeight, height, id, setNodes, isDiagramModifiable])
 
   useEffect(() => {
     if (width && width <= minWidth) {
-      setNodes((prev) =>
-        prev.map((node) => {
-          if (node.id === id) {
-            return {
-              ...node,
-              width: Math.max(width ?? 0, minWidth),
-              measured: {
+      setNodes(
+        (prev) =>
+          prev.map((node) => {
+            if (node.id === id) {
+              return {
+                ...node,
                 width: Math.max(width ?? 0, minWidth),
-              },
+                measured: {
+                  ...node.measured,
+                  width: Math.max(width ?? 0, minWidth),
+                },
+              }
             }
-          }
-          return node
-        })
+            return node
+          }),
+        { persist: isDiagramModifiable }
       )
     }
-  }, [id, setNodes, minWidth, width])
+  }, [id, setNodes, minWidth, width, isDiagramModifiable])
 
   const finalWidth = Math.max(width ?? 0, minWidth)
-  const finalHeight = minHeight
 
   return (
-    <DefaultNodeWrapper
-      width={finalWidth}
-      height={finalHeight}
-      elementId={id}
-      className="horizontally-not-resizable"
-    >
+    <DefaultNodeWrapper width={width} height={height} elementId={id}>
       <NodeToolbar elementId={id} />
 
       <NodeResizer
         nodeId={id}
-        isVisible={isDiagramModifiable && !!selected}
-        minWidth={finalWidth}
-        minHeight={finalHeight}
-        maxHeight={finalHeight}
-        handleStyle={{ width: 8, height: 8 }}
+        isVisible={isDiagramModifiable}
+        minWidth={minWidth}
+        minHeight={minHeight}
+        maxHeight={minHeight}
       />
-      <div ref={classSvgWrapperRef}>
+      <div ref={anchorRef}>
         <ClassSVG
           width={finalWidth}
-          height={finalHeight}
+          height={minHeight}
           data={data}
           id={id}
           showAssessmentResults={!isDiagramModifiable}
@@ -167,7 +161,7 @@ export function Class({
       </div>
 
       <PopoverManager
-        anchorEl={classSvgWrapperRef.current}
+        anchorEl={anchorEl}
         elementId={id}
         type={"class" as const}
       />

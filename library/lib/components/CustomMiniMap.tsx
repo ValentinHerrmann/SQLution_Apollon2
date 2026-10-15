@@ -1,9 +1,25 @@
-import { useState } from "react"
-import { MiniMap, MiniMapNodeProps, Panel, useReactFlow } from "@xyflow/react"
+import { useMemo, useState, type CSSProperties } from "react"
+import {
+  MiniMap,
+  MiniMapNodeProps,
+  Panel,
+  useStore,
+  type PanelPosition,
+} from "@xyflow/react"
+import {
+  ArrowDownLeft,
+  ArrowDownRight,
+  ArrowUpLeft,
+  ArrowUpRight,
+  Map,
+} from "lucide-react"
+import { useReactiveNode } from "@/hooks/useReactiveElement"
+import { useLabels } from "@/i18n/useLabels"
 import {
   ClassSVG,
   PackageSVG,
   ActivitySVG,
+  ActivitySwimlaneSVG,
   ActivityInitialNodeSVG,
   ActivityFinalNodeSVG,
   ActivityActionNodeSVG,
@@ -49,9 +65,6 @@ import {
   ReachabilityGraphMarkingSVG,
 } from "./svgs"
 import { DiagramNodeType } from "@/typings"
-import { ZINDEX_MINIMAP, ZINDEX_PANEL } from "@/constants/zindexConstants"
-import { MapIcon } from "./Icon/MapIcon"
-import { SouthEastArrowIcon } from "./Icon/SouthEastArrowIcon"
 import {
   BPMNEventProps,
   BPMNGatewayProps,
@@ -62,6 +75,7 @@ import {
   ComponentNodeProps,
   ComponentSubsystemNodeProps,
   DefaultNodeProps,
+  ActivitySwimlaneProps,
   DeploymentComponentProps,
   DeploymentNodeProps,
   ObjectNodeProps,
@@ -71,57 +85,138 @@ import {
   SfcTransitionBranchNodeProps,
 } from "@/types/nodes/NodeProps"
 
-export const CustomMiniMap = () => {
-  const [minimapCollapsed, setMinimapCollapsed] = useState(true)
+export interface CustomMiniMapProps {
+  /** Corner the minimap and its toggle anchor to. Default `"bottom-right"`. */
+  position?: PanelPosition
+  /** Drag the minimap to pan the diagram. Default `true`. */
+  pannable?: boolean
+  /** Scroll over the minimap to zoom the diagram. Default `true`. */
+  zoomable?: boolean
+  /** Render inside Apollon's overlay grid instead of a React Flow Panel slot. */
+  managed?: boolean
+}
 
-  if (minimapCollapsed) {
-    return (
-      <Panel position="bottom-right" onClick={() => setMinimapCollapsed(false)}>
-        <MapIcon fill="var(--apollon2-primary-contrast)" />
-      </Panel>
+// The collapse affordance points toward the corner the minimap tucks into, so it
+// stays intuitive at every position (a top-left minimap collapses up-left, not
+// down-right). Center positions bias to the nearest vertical edge's right.
+const COLLAPSE_ARROW: Partial<Record<PanelPosition, typeof ArrowDownRight>> = {
+  "top-left": ArrowUpLeft,
+  "top-center": ArrowUpRight,
+  "top-right": ArrowUpRight,
+  "bottom-left": ArrowDownLeft,
+  "bottom-center": ArrowDownRight,
+  "bottom-right": ArrowDownRight,
+}
+
+// Below this canvas width the expanded minimap can't share the bottom edge with
+// the zoom cluster without overlapping (a ~250px zoom + ~200px minimap don't fit),
+// so the minimap stays collapsed to its toggle — the standard small-screen
+// behaviour (tldraw/Figma hide or collapse the minimap on narrow viewports). The
+// collapsed toggle is tiny and never collides.
+const MINIMAP_EXPAND_MIN_WIDTH = 640
+
+export const CustomMiniMap = ({
+  position = "bottom-right",
+  pannable = true,
+  zoomable = true,
+  managed = false,
+}: CustomMiniMapProps = {}) => {
+  const [minimapCollapsed, setMinimapCollapsed] = useState(true)
+  const t = useLabels()
+  const CollapseArrow = COLLAPSE_ARROW[position] ?? ArrowDownRight
+  const canvasWidth = useStore((s) => s.width)
+  const tooNarrowToExpand =
+    canvasWidth > 0 && canvasWidth < MINIMAP_EXPAND_MIN_WIDTH
+
+  const panelPositionClasses = position.replace("-", " ")
+  const managedCollapseStyle = useMemo<CSSProperties>(() => {
+    const [vertical, horizontal] = position.split("-") as [
+      "top" | "bottom",
+      "left" | "center" | "right",
+    ]
+    return {
+      position: "absolute",
+      [vertical]: 0,
+      ...(horizontal === "left" ? { left: 0 } : { right: 0 }),
+    }
+  }, [position])
+
+  if (minimapCollapsed || tooNarrowToExpand) {
+    const content = (
+      <button
+        type="button"
+        className="apollon-chrome-iconbtn"
+        aria-label={t.showMinimap}
+        title={t.showMinimapHint}
+        onClick={() => setMinimapCollapsed(false)}
+      >
+        <Map width={18} height={18} aria-hidden="true" />
+      </button>
+    )
+
+    return managed ? (
+      <div
+        className={`react-flow__panel ${panelPositionClasses} apollon-mm-panel`}
+      >
+        {content}
+      </div>
+    ) : (
+      <Panel position={position}>{content}</Panel>
     )
   }
 
-  return (
-    <Panel
-      position="bottom-right"
+  // Expanded: the MiniMap renders as its own glass card (a React Flow Panel), and
+  // the collapse arrow is a SIBLING Panel at the same corner that is IDENTICAL to
+  // the collapsed open button (same glass panel + .apollon-chrome-iconbtn) — so
+  // toggling reads as one control and the cursor never moves. Rendering the
+  // MiniMap normally (not nested) keeps its sizing intact; a tight offsetScale
+  // avoids a fat empty margin around the diagram.
+  const map = (
+    <MiniMap
+      zoomable={zoomable}
+      pannable={pannable}
+      position={position}
+      ariaLabel={t.miniMap}
+      nodeComponent={MiniMapNode}
+      offsetScale={6}
+      bgColor="transparent"
+      className={`apollon-minimap${managed ? " apollon-mm" : ""}`}
+    />
+  )
+  const collapse = (
+    <button
+      type="button"
+      className="apollon-chrome-iconbtn"
+      aria-label={t.hideMinimap}
+      title={t.hideMinimap}
       onClick={() => setMinimapCollapsed(true)}
-      style={{ boxShadow: "none", backgroundColor: "transparent" }}
     >
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          right: 0,
-          display: "flex",
-          zIndex: ZINDEX_PANEL,
-          padding: 8,
-          backgroundColor: "var(--apollon2-background)",
-          borderRadius: "4px",
-          justifyContent: "center",
-          alignItems: "center",
-          cursor: "pointer",
-          boxShadow: "0 0 4px 0 rgb(0 0 0 / 0.2)",
-        }}
-      >
-        <SouthEastArrowIcon fill="var(--apollon2-primary-contrast)" />
-      </div>
+      <CollapseArrow width={18} height={18} aria-hidden="true" />
+    </button>
+  )
 
-      <MiniMap
-        zoomable
-        onClick={() => setMinimapCollapsed(true)}
-        nodeComponent={MiniMapNode}
-        offsetScale={20}
-        style={{ zIndex: ZINDEX_MINIMAP }}
-      />
-    </Panel>
+  return managed ? (
+    <div className="apollon-mm-shell">
+      {map}
+      <div
+        className={`react-flow__panel ${panelPositionClasses} apollon-mm-panel apollon-mm-collapse`}
+        style={managedCollapseStyle}
+      >
+        {collapse}
+      </div>
+    </div>
+  ) : (
+    <>
+      {map}
+      <Panel position={position}>{collapse}</Panel>
+    </>
   )
 }
 
 function MiniMapNode({ id, x, y }: MiniMapNodeProps) {
-  const { getNode } = useReactFlow()
-
-  const nodeInfo = getNode(id)
+  // Subscribe so the minimap preview tracks node data/size changes; an
+  // imperative getNode() read goes stale once the compiler memoizes this.
+  const nodeInfo = useReactiveNode(id)
   if (!nodeInfo) return null
 
   switch (nodeInfo.type as DiagramNodeType) {
@@ -161,6 +256,16 @@ function MiniMapNode({ id, x, y }: MiniMapNodeProps) {
           width={nodeInfo.width ?? 0}
           height={nodeInfo.height ?? 0}
           data={nodeInfo.data as DefaultNodeProps}
+          id={`minimap_${id}`}
+          svgAttributes={{ x, y }}
+        />
+      )
+    case "activitySwimlane":
+      return (
+        <ActivitySwimlaneSVG
+          width={nodeInfo.width ?? 0}
+          height={nodeInfo.height ?? 0}
+          data={nodeInfo.data as ActivitySwimlaneProps}
           id={`minimap_${id}`}
           svgAttributes={{ x, y }}
         />

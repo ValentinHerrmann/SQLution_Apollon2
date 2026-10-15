@@ -1,159 +1,95 @@
-import { ZINDEX_LABEL } from "@/constants/zindexConstants"
 import { IPoint } from "../Connection"
-import { EdgeLabelRenderer } from "@xyflow/react"
 import { MessageData } from "../EdgeProps"
-import { useMessagePositioning } from "../../hooks"
-import { Stack } from "@mui/material"
+import {
+  ARROW_SIZE,
+  computeMessageLayout,
+  MessageGroupLayout,
+} from "./messageLayout"
 
 interface EdgeMultipleLabelsProps {
   messages?: MessageData[]
   pathMiddlePosition: IPoint
   showRelationshipLabels: boolean
-  isReconnectingRef?: React.MutableRefObject<boolean>
   sourcePosition: IPoint
   targetPosition: IPoint
-  edgePoints?: IPoint[]
-  isHorizontalEdge?: boolean
+  isHorizontalEdge: boolean
   textColor: string
 }
+
 export const EdgeMultipleLabels = ({
   messages,
   pathMiddlePosition,
   showRelationshipLabels,
-  isReconnectingRef,
   sourcePosition,
   targetPosition,
-  edgePoints,
   isHorizontalEdge,
   textColor,
 }: EdgeMultipleLabelsProps) => {
-  const displayMessages: MessageData[] = messages || []
+  const displayMessages = messages ?? []
 
-  const {
-    forwardMessages,
-    backwardMessages,
-    forwardArrowRotation,
-    backwardArrowRotation,
-    forwardLabelBoxPosition,
-    backwardLabelBoxPosition,
-    isPositioned,
-  } = useMessagePositioning(
+  if (displayMessages.length === 0 || !showRelationshipLabels) return null
+
+  const { forward, backward } = computeMessageLayout(
     displayMessages,
     sourcePosition,
     targetPosition,
-    pathMiddlePosition,
-    edgePoints,
     isHorizontalEdge
   )
 
-  if (
-    !displayMessages ||
-    displayMessages.length === 0 ||
-    !showRelationshipLabels ||
-    !isPositioned
-  )
-    return null
-
-  if (isReconnectingRef?.current) return null
-
-  const getMessageOffset = (index: number, isForward: boolean) => {
-    const spacing = 25
-
-    if (isHorizontalEdge) {
-      if (isForward) {
-        return { y: -index * spacing, x: 0 }
-      } else {
-        return { y: index * spacing, x: 0 }
-      }
-    } else {
-      return { y: index * spacing, x: 0 }
-    }
-  }
-
-  const renderMessages = (
-    messageList: MessageData[],
-    labelBoxPosition: { x: number; y: number },
-    arrowRotation: number,
-    keyPrefix: string,
-    isForward: boolean
-  ) => {
-    return messageList.map((message, index) => {
-      const offset = getMessageOffset(index, isForward)
-
-      return (
-        <div key={`${keyPrefix}-${index}`}>
-          {/* Message container with arrow and text */}
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={1}
-            style={{
-              position: "absolute",
-              transform: `translate(${pathMiddlePosition.x + labelBoxPosition.x + offset.x}px, ${pathMiddlePosition.y + labelBoxPosition.y + offset.y}px) translate(-50%, -50%)`,
-              zIndex: ZINDEX_LABEL,
-              pointerEvents: "none",
-            }}
-            className="nodrag nopan"
+  const renderGroup = (group: MessageGroupLayout, keyPrefix: string) =>
+    group.messages.map((message, index) => (
+      <g key={`${keyPrefix}-${message.id}`}>
+        {/* One direction arrow per group, drawn with the first message. */}
+        {index === 0 && (
+          <g
+            transform={`translate(${pathMiddlePosition.x + group.arrowOrigin.x}, ${
+              pathMiddlePosition.y + group.arrowOrigin.y
+            }) rotate(${group.arrowRotation}, ${ARROW_SIZE / 2}, ${ARROW_SIZE / 2})`}
           >
-            {/* Arrow (only for first message in group) */}
-            {index === 0 && (
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{
-                  color: textColor,
-                  transform: `rotate(${arrowRotation}deg)`,
-                  transformOrigin: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <path d="M2 12h20" />
-                <path d="m17 5 5 7-5 7" />
-              </svg>
-            )}
-
-            {/* Label */}
-            <div
-              style={{
-                fontSize: "14px",
-                fontWeight: 400,
-                color: textColor,
-                whiteSpace: "nowrap",
-              }}
+            {/* Lucide "move-right" glyph (24×24, stroked) scaled to the arrow box. */}
+            <g
+              transform={`scale(${ARROW_SIZE / 24})`}
+              stroke={textColor}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
             >
-              {message.text}
-            </div>
-          </Stack>
-        </div>
-      )
-    })
-  }
+              <path d="M2 12h20" />
+              <path d="m17 5 5 7-5 7" />
+            </g>
+          </g>
+        )}
+
+        <text
+          x={
+            pathMiddlePosition.x +
+            group.textOrigin.x +
+            index * group.stackStep.x
+          }
+          y={
+            pathMiddlePosition.y +
+            group.textOrigin.y +
+            index * group.stackStep.y
+          }
+          textAnchor={group.textAnchor}
+          dominantBaseline="central"
+          style={{
+            fontSize: "14px",
+            fill: textColor,
+            userSelect: "none",
+            pointerEvents: "none",
+          }}
+        >
+          {message.text}
+        </text>
+      </g>
+    ))
 
   return (
-    <EdgeLabelRenderer>
-      {/* Forward Messages (pointing to target) */}
-      {renderMessages(
-        forwardMessages,
-        forwardLabelBoxPosition,
-        forwardArrowRotation,
-        "forward",
-        true // isForward = true
-      )}
-
-      {/* Backward Messages (pointing to source) */}
-      {renderMessages(
-        backwardMessages,
-        backwardLabelBoxPosition,
-        backwardArrowRotation,
-        "backward",
-        false // isForward = false
-      )}
-    </EdgeLabelRenderer>
+    <g className="edge-labels">
+      {renderGroup(forward, "forward")}
+      {renderGroup(backward, "backward")}
+    </g>
   )
 }

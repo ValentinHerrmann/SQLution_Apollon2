@@ -2,11 +2,12 @@ import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
 import { useHandleDelete } from "@/hooks/useHandleDelete"
 import { useIsOnlyThisElementSelected } from "@/hooks/useIsOnlyThisElementSelected"
 import { usePopoverStore } from "@/store"
-import { Box } from "@mui/material"
+import { ButtonGroup, IconButton } from "@/components/ui"
+import { useLabels } from "@/i18n/useLabels"
 import { Position, NodeToolbar as ReactFlowNodeToolbar } from "@xyflow/react"
+import { Pencil, Trash2 } from "lucide-react"
 import { FC } from "react"
 import { useShallow } from "zustand/shallow"
-import { DeleteIcon, EditIcon } from "../Icon"
 
 interface Props {
   elementId: string
@@ -20,6 +21,7 @@ export const NodeToolbar: FC<Props> = ({ elementId, showEdit = true }) => {
 
   const isDiagramModifiable = useDiagramModifiable()
   const selected = useIsOnlyThisElementSelected(elementId)
+  const t = useLabels()
 
   return (
     <ReactFlowNodeToolbar
@@ -27,22 +29,34 @@ export const NodeToolbar: FC<Props> = ({ elementId, showEdit = true }) => {
       position={Position.Top}
       align="end"
       offset={10}
+      className="apollon-element-toolbar-host"
     >
-      <Box sx={{ display: "flex", gap: 1, flexDirection: "column" }}>
-        <DeleteIcon
+      <ButtonGroup
+        aria-label={t.selectionActions}
+        orientation="vertical"
+        className="apollon-element-toolbar nodrag nopan"
+        onPointerDownCapture={(event) => event.stopPropagation()}
+      >
+        <IconButton
+          ariaLabel={t.deleteElement}
+          tooltip={t.deleteElement}
           onClick={handleDelete}
-          style={{ cursor: "pointer", width: 16, height: 16 }}
-        />
+        >
+          <Trash2 width={16} height={16} aria-hidden="true" />
+        </IconButton>
 
         {showEdit && (
-          <EditIcon
+          <IconButton
+            ariaLabel={t.editElement}
+            tooltip={t.editElement}
             onClick={() => {
               setPopOverElementId(elementId)
             }}
-            style={{ cursor: "pointer", width: 16, height: 16 }}
-          />
+          >
+            <Pencil width={16} height={16} aria-hidden="true" />
+          </IconButton>
         )}
-      </Box>
+      </ButtonGroup>
     </ReactFlowNodeToolbar>
   )
 }
