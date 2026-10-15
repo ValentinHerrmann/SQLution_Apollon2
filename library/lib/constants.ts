@@ -15,7 +15,6 @@ import {
   ActivitySVG,
   ActivitySwimlaneSVG,
   ClassSVG,
-  PackageSVG,
   UseCaseNodeSVG,
   UseCaseSystemNodeSVG,
   UseCaseActorNodeSVG,
@@ -55,7 +54,7 @@ import {
 } from "@/components"
 import { ReachabilityGraphMarkingSVG } from "@/components/svgs/nodes/reachabilityGraphDiagram/ReachabilityGraphMarkingSVG"
 import { DiagramNodeType } from "@/nodes"
-import { ClassStereotype, UMLDiagramType } from "@/types"
+import { UMLDiagramType } from "@/types"
 import { CANVAS, EDGES, INTERFACE } from "@/utils/geometry/routingConstants"
 
 export { CANVAS, EDGES, INTERFACE }
@@ -409,64 +408,18 @@ export type DropElementConfig = {
 export const dropElementConfigs: Readonly<
   Record<UMLDiagramType, ReadonlyArray<DropElementConfig>>
 > = Object.freeze({
+  // SQLution: class diagrams model database tables. The palette offers a
+  // single "Tabelle" (one column, no methods) instead of the UML class,
+  // package, abstract, enumeration and interface templates.
   [UMLDiagramType.ClassDiagram]: [
     {
-      type: "package",
-      width: DROPS.DEFAULT_ELEMENT_WIDTH,
-      height: 120,
-      defaultData: { name: "Package" },
-      svg: PackageSVG,
-    },
-    {
       type: "class",
       width: DROPS.DEFAULT_ELEMENT_WIDTH,
-      height: 100,
+      height: 70,
       defaultData: {
-        name: "Class",
-        methods: [{ id: generateUUID(), name: "+ method()" }],
-        attributes: [{ id: generateUUID(), name: "+ attribute: Type" }],
-      },
-      svg: ClassSVG,
-    },
-    {
-      type: "class",
-      width: DROPS.DEFAULT_ELEMENT_WIDTH,
-      // No keyword line (abstract is an italic name, not a «keyword»), so this
-      // is 10px shorter than the interface/enumeration templates.
-      height: 100,
-      defaultData: {
-        name: "Abstract",
-        isAbstract: true,
-        methods: [{ id: generateUUID(), name: "+ method()" }],
-        attributes: [{ id: generateUUID(), name: "+ attribute: Type" }],
-      },
-      svg: ClassSVG,
-    },
-    {
-      type: "class",
-      width: DROPS.DEFAULT_ELEMENT_WIDTH,
-      height: 140,
-      defaultData: {
-        name: "Enumeration",
-        stereotype: ClassStereotype.Enumeration,
+        name: "Tabelle",
         methods: [],
-        attributes: [
-          { id: generateUUID(), name: "Case 1" },
-          { id: generateUUID(), name: "Case 2" },
-          { id: generateUUID(), name: "Case 3" },
-        ],
-      },
-      svg: ClassSVG,
-    },
-    {
-      type: "class",
-      width: DROPS.DEFAULT_ELEMENT_WIDTH,
-      height: 110,
-      defaultData: {
-        name: "Interface",
-        stereotype: ClassStereotype.Interface,
-        methods: [{ id: generateUUID(), name: "+ method()" }],
-        attributes: [{ id: generateUUID(), name: "+ attribute: Type" }],
+        attributes: [{ id: generateUUID(), name: "Typ Spalte" }],
       },
       svg: ClassSVG,
     },

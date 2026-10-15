@@ -8,7 +8,7 @@ import {
 import { useMetadataStore, useOverlayStore } from "@/store/context"
 import { useShallow } from "zustand/shallow"
 import { DraggableGhost } from "./DraggableGhost"
-import { ApollonMode, ApollonView } from "@/typings"
+import { ApollonMode, ApollonView, UMLDiagramType } from "@/typings"
 import {
   COMPACT_PALETTE,
   PALETTE,
@@ -110,8 +110,12 @@ export const Sidebar = () => {
     }
   }, [])
 
+  // SQLution: class diagrams model database tables, so the free-text
+  // color-description element is not offered there.
+  const showColorDescription = diagramType !== UMLDiagramType.ClassDiagram
+
   // The color-description element is the last grid cell.
-  const cellCount = paletteItems.length + 1
+  const cellCount = paletteItems.length + (showColorDescription ? 1 : 0)
   const chromeHeight = showInteractiveSelectionView ? VIEW_SWITCH_HEIGHT : 0
   const layout = useMemo(
     () =>
@@ -134,7 +138,10 @@ export const Sidebar = () => {
   const previewScale = useMemo(() => {
     if (layout.cellW <= 0 || layout.cellH <= 0) return 0
     return Math.min(
-      ...[...paletteItems, ColorDescriptionConfig].map((config) =>
+      ...[
+        ...paletteItems,
+        ...(showColorDescription ? [ColorDescriptionConfig] : []),
+      ].map((config) =>
         previewScaleForCell(
           config.width,
           config.height + previewExtraHeight(config.type),
@@ -144,7 +151,13 @@ export const Sidebar = () => {
         )
       )
     )
-  }, [paletteItems, layout.cellW, layout.cellH, canvas.compact])
+  }, [
+    paletteItems,
+    showColorDescription,
+    layout.cellW,
+    layout.cellH,
+    canvas.compact,
+  ])
 
   if (!showPalette || paletteItems.length === 0) {
     return null
@@ -250,11 +263,12 @@ export const Sidebar = () => {
               `${config.type}_${config.defaultData?.name}`
             )
           )}
-          {renderCell(
-            ColorDescriptionConfig,
-            "sidebarElement_ColorDescription",
-            "colorDescription"
-          )}
+          {showColorDescription &&
+            renderCell(
+              ColorDescriptionConfig,
+              "sidebarElement_ColorDescription",
+              "colorDescription"
+            )}
         </div>
       )}
     </aside>

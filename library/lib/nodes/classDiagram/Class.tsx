@@ -93,8 +93,12 @@ export function Class({
     ]
   )
 
+  // SQLution: keep the node height in sync with its content in both
+  // directions, so a table shrinks again when columns are removed (upstream
+  // only grows it). Otherwise the node box keeps stale empty space below the
+  // rendered class and edges attach to the wrong outline.
   useEffect(() => {
-    if (height && height <= minHeight) {
+    if (height !== minHeight) {
       setNodes(
         (prev) =>
           prev.map((node) => {
@@ -140,7 +144,7 @@ export function Class({
   const finalWidth = Math.max(width ?? 0, minWidth)
 
   return (
-    <DefaultNodeWrapper width={width} height={height} elementId={id}>
+    <DefaultNodeWrapper width={width} height={minHeight} elementId={id}>
       <NodeToolbar elementId={id} />
 
       <NodeResizer
