@@ -1,0 +1,33 @@
+{
+  "name": "@sqlution/apollon-embed",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SQLution's embed bundle of the Apollon editor: mounts the class-diagram editor into a Django page and exposes the window.apollon2 bridge.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.21.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter @tumaet/apollon run build && tsc --noEmit && vite build",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@resvg/resvg-wasm": "catalog:",
+    "@tumaet/apollon": "workspace:*",
+    "@xyflow/react": "catalog:",
+    "jspdf": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "svg2pdf.js": "catalog:",
+    "y-protocols": "catalog:",
+    "yjs": "catalog:"
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "eslint": "catalog:",
+    "globals": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
+    "vite": "catalog:"
+  }
+}

@@ -22,6 +22,10 @@
       "project": ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}"],
       "ignoreDependencies": ["@tailwindcss/vite"]
     },
+    "standalone/sqlution-embed": {
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["jspdf", "svg2pdf.js"]
+    },
     "standalone/webapp": {
       "entry": [
         "src/**/*.stories.{ts,tsx}",
