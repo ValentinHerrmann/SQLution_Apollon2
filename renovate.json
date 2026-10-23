@@ -1,21 +1,120 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
-  "schedule": ["* 20 * * 6"],
+  "description": "Auto-PR flow: non-major updates open weekly grouped PRs; low-risk lanes automerge on green CI; majors are gated on the dashboard.",
+  "extends": ["config:best-practices", ":semanticCommitTypeAll(chore)"],
+  "labels": ["dependencies"],
+
   "timezone": "Europe/Berlin",
+  "schedule": ["before 7am on monday"],
+
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+
+  "platformAutomerge": false,
+  "automergeStrategy": "squash",
+  "semanticCommitScope": "deps",
+
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Dependency Dashboard",
+
+  "rebaseWhen": "conflicted",
+  "postUpdateOptions": ["pnpmDedupe"],
+
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 7am on tuesday"],
+    "automerge": true,
+    "labels": ["dependencies", "lockfile-maintenance"]
+  },
+
   "packageRules": [
     {
-      "matchPackagePatterns": ["*"],
+      "description": "Batch every non-major update into one weekly review PR.",
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "minor and patch dependencies",
-      "groupSlug": "minor-patch",
+      "labels": ["dependencies"],
+      "matchPackageNames": ["*"]
+    },
+    {
+      "description": "Majors carry breaking changes: gate them on the dashboard and soak longer so a human opts in per package.",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true,
+      "minimumReleaseAge": "14 days",
+      "labels": ["dependencies", "breaking"]
+    },
+    {
+      "description": "GitHub Actions are SHA-pinned and run cheap CI.",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions",
+      "labels": ["dependencies", "ci"]
+    },
+    {
+      "description": "Docker base-image version bumps ship into published images — group them for review.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "groupName": "Docker images",
+      "labels": ["dependencies", "infrastructure"]
+    },
+    {
+      "description": "Automerge non-major GitHub Actions once CI is green — SHA-pinned, cheap to verify, high-toil to hand-merge.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest", "pinDigest"],
       "automerge": true
     },
     {
-      "matchPackagePatterns": ["*"],
-      "matchUpdateTypes": ["major"],
-      "groupName": "major dependencies",
-      "groupSlug": "major"
+      "description": "Automerge digest-only re-pins (same tag, new SHA) across managers — no version change to review.",
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "automerge": true
+    },
+    {
+      "description": "Keep the verified React Flow/system pair until the touch regression is fixed.",
+      "matchPackageNames": ["@xyflow/react"],
+      "allowedVersions": "12.11.1"
+    },
+    {
+      "description": "Keep the system version required by the verified React Flow version.",
+      "matchPackageNames": ["@xyflow/system"],
+      "allowedVersions": "0.0.78"
+    },
+    {
+      "description": "Keep Node PDF export working until the ESM package entry is fixed.",
+      "matchPackageNames": ["svg2pdf.js"],
+      "allowedVersions": "<2.8.0"
+    },
+    {
+      "description": "Match the VS Code API series declared in engines.vscode.",
+      "matchPackageNames": ["@types/vscode"],
+      "allowedVersions": ">=1.86.0 <1.87.0"
+    },
+    {
+      "description": "Keep TypeScript within typescript-eslint's supported peer range.",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<6.1.0"
+    },
+    {
+      "description": "Move formatter-minor migrations into a separate formatting change.",
+      "matchPackageNames": ["prettier"],
+      "allowedVersions": "<3.9.0"
+    },
+    {
+      "description": "@types/pdfmake — pinned to 0.2.x because 0.3.x removed the .vfs property used by standalone/server/src/workers/pdf-conversion-worker-thread.ts. Re-evaluate when migrating the worker to the 0.3 API.",
+      "matchPackageNames": ["@types/pdfmake"],
+      "enabled": false
     }
-  ]
+  ],
+
+  "osvVulnerabilityAlerts": true,
+
+  "vulnerabilityAlerts": {
+    "labels": ["security", "dependencies"],
+    "schedule": ["at any time"],
+    "minimumReleaseAge": null,
+    "dependencyDashboardApproval": false,
+    "automerge": true,
+    "groupName": null
+  },
+
+  "ignorePaths": ["**/node_modules/**", "**/dist/**"]
 }

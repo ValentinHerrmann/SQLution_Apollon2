@@ -1,0 +1,28 @@
+# Source & per-workspace configs (excluded from the published VSIX).
+src/**
+tests/**
+.vscode/**
+vite.config.ts
+vitest.config.ts
+.github/**
+.gitignore
+**/tsconfig.json
+**/eslint.config.mjs
+**/*.ts
+**/*.tsbuildinfo
+
+# Dev-only docs (the Marketplace listing uses README.md).
+README.dev.md
+
+# Sourcemaps stay out of the published VSIX — keep VSIX small + symbols
+# private. Local `pnpm run watch` still emits them next to dist/extension.js
+# for the Extension Development Host. .vsix consumers don't need them.
+**/*.js.map
+
+# node_modules — `vsce package --no-dependencies` already skips the root tree,
+# but not one nested in a subdirectory, and an unanchored pattern matches both.
+**/node_modules/**
+
+# The webview workspace: ship its build output only.
+webview/**
+!webview/dist/**

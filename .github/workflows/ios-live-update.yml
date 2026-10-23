@@ -1,0 +1,130 @@
+name: ios-live-update
+
+# Publishes an over-the-air web-bundle update for the mobile app. The bundle is
+# the SAME dist the webapp deploy ships, signed with the Capgo private key, and
+# copied to the directory the webapp nginx serves at /live-updates/. Reuses the
+# EXISTING deployment identity and gateway (VM_* + DEPLOYMENT_GATEWAY_*), so no
+# new key or user is introduced. Runs on manual dispatch and is callable from
+# the production deploy so a normal deploy also publishes the matching bundle.
+#
+# Uses (already configured for deploys):
+#   secrets: CAPGO_PRIVATE_KEY, VM_SSH_PRIVATE_KEY, DEPLOYMENT_GATEWAY_SSH_KEY
+#   vars:    CAPGO_PUBLIC_KEY, CAPGO_MIN_NATIVE_VERSION, VM_HOST, VM_USERNAME,
+#            DEPLOYMENT_GATEWAY_HOST, DEPLOYMENT_GATEWAY_USER, DEPLOYMENT_GATEWAY_PORT
+
+on:
+  workflow_dispatch:
+    inputs:
+      source-ref:
+        description: >
+          Commit to package, as the deployed image tag (`sha-<commit>`) or a raw
+          commit SHA. Semantic image tags such as `5.2.0` resolve to the matching
+          `v5.2.0` Git tag. Empty uses the dispatched ref.
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      source-ref:
+        description: "Deployed image tag (`sha-<commit>` or `X.Y.Z`) or commit SHA to package."
+        required: false
+        type: string
+
+concurrency:
+  group: ios-live-update-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      # SHA image tags map directly to commits. Standalone release image tags omit
+      # the Git tag's leading `v`, so add it back before checkout.
+      - name: Resolve the commit to package
+        id: source
+        run: |
+          set -euo pipefail
+
+          REF="${{ inputs.source-ref }}"
+          if [ -z "$REF" ]; then
+            RESOLVED_REF="$GITHUB_SHA"
+          elif [[ "$REF" == sha-* ]]; then
+            RESOLVED_REF="${REF#sha-}"
+          elif [[ "$REF" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            RESOLVED_REF="v$REF"
+          else
+            RESOLVED_REF="$REF"
+          fi
+
+          echo "Packaging deployed image tag $REF from $RESOLVED_REF."
+          echo "ref=$RESOLVED_REF" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ steps.source.outputs.ref }}
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web bundle
+        run: |
+          pnpm --filter @tumaet/apollon run build
+          pnpm --filter @tumaet/webapp run build
+
+      - name: Build + sign the live-update bundle
+        working-directory: standalone/webapp
+        env:
+          CAPGO_PRIVATE_KEY: ${{ secrets.CAPGO_PRIVATE_KEY }}
+          CAPGO_PUBLIC_KEY: ${{ vars.CAPGO_PUBLIC_KEY }}
+          CAPGO_MIN_NATIVE_VERSION: ${{ vars.CAPGO_MIN_NATIVE_VERSION }}
+        run: pnpm run live-update:build
+
+      # Preserve the public, signed artifacts before entering the deployment
+      # transport. If the gateway is unavailable, an operator can download this
+      # artifact and copy it to the VM without handling the private signing key.
+      - name: Upload signed live-update recovery artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ios-live-update
+          path: standalone/webapp/live-updates-dist/
+          if-no-files-found: error
+          retention-days: 7
+
+      # Upload the immutable bundle zip(s) FIRST so the manifest never points at
+      # a file that is not yet on the host.
+      - name: Copy bundle zips to the VM
+        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
+        with:
+          host: ${{ vars.VM_HOST }}
+          username: ${{ vars.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          proxy_host: ${{ vars.DEPLOYMENT_GATEWAY_HOST }}
+          proxy_username: ${{ vars.DEPLOYMENT_GATEWAY_USER }}
+          proxy_key: ${{ secrets.DEPLOYMENT_GATEWAY_SSH_KEY }}
+          proxy_port: ${{ vars.DEPLOYMENT_GATEWAY_PORT }}
+          source: "standalone/webapp/live-updates-dist/*.zip"
+          target: "/opt/apollon/app/live-updates/"
+          strip_components: 3
+
+      - name: Copy manifest to the VM
+        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
+        with:
+          host: ${{ vars.VM_HOST }}
+          username: ${{ vars.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          proxy_host: ${{ vars.DEPLOYMENT_GATEWAY_HOST }}
+          proxy_username: ${{ vars.DEPLOYMENT_GATEWAY_USER }}
+          proxy_key: ${{ secrets.DEPLOYMENT_GATEWAY_SSH_KEY }}
+          proxy_port: ${{ vars.DEPLOYMENT_GATEWAY_PORT }}
+          source: "standalone/webapp/live-updates-dist/manifest.json"
+          target: "/opt/apollon/app/live-updates/"
+          strip_components: 3

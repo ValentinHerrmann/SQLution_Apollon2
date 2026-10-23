@@ -1,16 +1,17 @@
-import { CustomText } from "@/components"
-import { LINE_WIDTH } from "@/constants"
+import { MultilineText } from "@/components"
+import { maxLinesForHeight } from "@/utils/svgTextLayout"
+import { LAYOUT } from "@/constants"
 import { useDiagramStore } from "@/store"
 import { useShallow } from "zustand/shallow"
 import AssessmentIcon from "../../AssessmentIcon"
 import { SVGComponentProps } from "@/types/SVG"
 import { DefaultNodeProps } from "@/types"
+import { PACKAGE_TAB_HEIGHT } from "@/utils/geometry/nodeGeometry"
 
 export type PackageSVGProps = SVGComponentProps & {
   data: DefaultNodeProps
 }
 
-const leftTopBoxHeight = 10
 const padding = 5
 
 export const PackageSVG: React.FC<PackageSVGProps> = ({
@@ -19,19 +20,19 @@ export const PackageSVG: React.FC<PackageSVGProps> = ({
   height,
   data,
   svgAttributes,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
   showAssessmentResults = false,
 }) => {
   const { name } = data
   const assessments = useDiagramStore(useShallow((state) => state.assessments))
   const nodeScore = assessments[id]?.score
 
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
 
-  const strokeColor = data.strokeColor || "var(--apollon2-primary-contrast)"
-  const fillColor = data.fillColor || "var(--apollon2-background)"
-  const textColor = data.textColor || "var(--apollon2-primary-contrast)"
+  const strokeColor = data.strokeColor || "var(--apollon-foreground, #000000)"
+  const fillColor = data.fillColor || "var(--apollon-background, white)"
+  const textColor = data.textColor || "var(--apollon-foreground, #000000)"
 
   return (
     <svg
@@ -47,8 +48,8 @@ export const PackageSVG: React.FC<PackageSVGProps> = ({
           x={0}
           y={0}
           width={40}
-          height={leftTopBoxHeight}
-          strokeWidth={LINE_WIDTH}
+          height={PACKAGE_TAB_HEIGHT}
+          strokeWidth={LAYOUT.LINE_WIDTH}
           stroke={strokeColor}
           fill={fillColor}
         />
@@ -56,25 +57,31 @@ export const PackageSVG: React.FC<PackageSVGProps> = ({
         {/* Main Box */}
         <rect
           x={0}
-          y={leftTopBoxHeight}
+          y={PACKAGE_TAB_HEIGHT}
           width={width}
-          height={height - leftTopBoxHeight}
-          strokeWidth={LINE_WIDTH}
+          height={height - PACKAGE_TAB_HEIGHT}
+          strokeWidth={LAYOUT.LINE_WIDTH}
           stroke={strokeColor}
           fill={fillColor}
         />
 
-        {/* Name Text */}
-        <CustomText
+        {/* Name Text — anchored just below the left-top tab. First line's
+            center lands a few px below the tab bottom to preserve the
+            visible position of the original hanging-baseline layout. */}
+        <MultilineText
+          text={name}
           x={width / 2}
-          y={leftTopBoxHeight + padding}
-          textAnchor="middle"
+          y={PACKAGE_TAB_HEIGHT + padding + 7}
+          maxWidth={width - 24}
+          fontSize={LAYOUT.NAME_FONT_SIZE}
           fontWeight="600"
-          dominantBaseline="hanging"
           fill={textColor}
-        >
-          {name}
-        </CustomText>
+          verticalAnchor="top"
+          maxLines={maxLinesForHeight(
+            height - PACKAGE_TAB_HEIGHT - padding - 16,
+            LAYOUT.NAME_LINE_HEIGHT
+          )}
+        />
       </g>
 
       {showAssessmentResults && (

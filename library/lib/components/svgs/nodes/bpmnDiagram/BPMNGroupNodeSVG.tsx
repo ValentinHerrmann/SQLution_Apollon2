@@ -1,5 +1,6 @@
-import { CustomText } from "@/components"
-import { LINE_WIDTH } from "@/constants"
+import { MultilineText } from "@/components"
+import { maxLinesForHeight } from "@/utils/svgTextLayout"
+import { LAYOUT } from "@/constants"
 import { useDiagramStore } from "@/store"
 import { SVGComponentProps } from "@/types/SVG"
 import { useShallow } from "zustand/shallow"
@@ -16,15 +17,15 @@ export const BPMNGroupNodeSVG: React.FC<BPMNGroupNodeSVGProps> = ({
   height,
   data,
   svgAttributes,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
   id,
   showAssessmentResults = false,
 }) => {
   const { name } = data
   const assessments = useDiagramStore(useShallow((state) => state.assessments))
   const nodeScore = assessments[id]?.score
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
 
   const { strokeColor, textColor } = getCustomColorsFromData(data)
   const fillColor = data.fillColor || "none"
@@ -42,22 +43,22 @@ export const BPMNGroupNodeSVG: React.FC<BPMNGroupNodeSVGProps> = ({
         width={width}
         height={height}
         stroke={strokeColor}
-        strokeWidth={LINE_WIDTH}
+        strokeWidth={LAYOUT.LINE_WIDTH}
         fill={fillColor}
-        strokeDasharray="4"
+        strokeDasharray="10"
         rx={10}
         ry={10}
       />
-      <CustomText
+      <MultilineText
+        text={name}
         x={width / 2}
         y={height / 2}
-        textAnchor="middle"
-        dominantBaseline="middle"
+        maxWidth={width - 16}
+        fontSize={LAYOUT.NAME_FONT_SIZE}
         fontWeight="bold"
         fill={textColor}
-      >
-        {name}
-      </CustomText>
+        maxLines={maxLinesForHeight(height - 16, LAYOUT.NAME_LINE_HEIGHT)}
+      />
 
       {showAssessmentResults && (
         <AssessmentIcon x={width - 15} y={-15} score={nodeScore} />

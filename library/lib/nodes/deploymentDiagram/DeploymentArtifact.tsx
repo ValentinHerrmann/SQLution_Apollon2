@@ -1,12 +1,11 @@
-import { NodeProps, NodeResizer, type Node } from "@xyflow/react"
-import { DefaultNodeWrapper } from "../wrappers"
+import { NodeProps, type Node } from "@xyflow/react"
+import { usePopoverAnchor } from "@/hooks/usePopoverAnchor"
+import { DefaultNodeWrapper, NodeResizer } from "../wrappers"
 import { DefaultNodeProps } from "@/types"
-import { useRef } from "react"
 import { PopoverManager } from "@/components/popovers/PopoverManager"
 import { DeploymentArtifactSVG } from "@/components"
 import { useHandleOnResize } from "@/hooks"
 import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
-import { useIsOnlyThisElementSelected } from "@/hooks/useIsOnlyThisElementSelected"
 import { NodeToolbar } from "@/components/toolbars/NodeToolbar"
 
 export function DeploymentArtifact({
@@ -16,10 +15,9 @@ export function DeploymentArtifact({
   data,
   parentId,
 }: NodeProps<Node<DefaultNodeProps>>) {
-  const svgWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [anchorEl, anchorRef] = usePopoverAnchor()
   const { onResize } = useHandleOnResize(parentId)
   const isDiagramModifiable = useDiagramModifiable()
-  const selected = useIsOnlyThisElementSelected(id)
 
   if (!width || !height) {
     return null
@@ -30,13 +28,12 @@ export function DeploymentArtifact({
       <NodeToolbar elementId={id} />
 
       <NodeResizer
-        isVisible={isDiagramModifiable && !!selected}
+        isVisible={isDiagramModifiable}
         onResize={onResize}
         minHeight={50}
         minWidth={50}
-        handleStyle={{ width: 8, height: 8 }}
       />
-      <div ref={svgWrapperRef}>
+      <div ref={anchorRef}>
         <DeploymentArtifactSVG
           width={width}
           height={height}
@@ -46,11 +43,7 @@ export function DeploymentArtifact({
         />
       </div>
 
-      <PopoverManager
-        anchorEl={svgWrapperRef.current}
-        elementId={id}
-        type="default"
-      />
+      <PopoverManager anchorEl={anchorEl} elementId={id} type="default" />
     </DefaultNodeWrapper>
   )
 }

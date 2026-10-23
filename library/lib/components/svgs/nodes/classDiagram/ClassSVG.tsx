@@ -1,11 +1,5 @@
 import { ClassNodeElement, ClassNodeProps } from "@/types"
-import {
-  DEFAULT_HEADER_HEIGHT,
-  DEFAULT_ATTRIBUTE_HEIGHT,
-  DEFAULT_METHOD_HEIGHT,
-  DEFAULT_PADDING,
-  DEFAULT_HEADER_HEIGHT_WITH_STREOTYPE,
-} from "@/constants/dropElementConfig"
+import { LAYOUT } from "@/constants"
 import { SeparationLine } from "@/components/svgs/nodes/SeparationLine"
 import { HeaderSection } from "../HeaderSection"
 import { RowBlockSection } from "../RowBlockSection"
@@ -17,11 +11,6 @@ import { AssessmentSelectableElement } from "@/components/AssessmentSelectableEl
 import { StyledRect } from "../../StyledElements"
 import { getCustomColorsFromData } from "@/utils/layoutUtils"
 
-export interface MinSize {
-  minWidth: number
-  minHeight: number
-}
-
 export type ClassSVGProps = SVGComponentProps & {
   data: ClassNodeProps
 }
@@ -30,20 +19,20 @@ export const ClassSVG = ({
   id,
   width,
   height,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
   svgAttributes,
   showAssessmentResults = false,
   data,
 }: ClassSVGProps) => {
   // Layout constants
-  const { attributes, methods, name, stereotype } = data
+  const { attributes, methods, name, stereotype, isAbstract } = data
   const showStereotype = !!stereotype
   const headerHeight = showStereotype
-    ? DEFAULT_HEADER_HEIGHT_WITH_STREOTYPE
-    : DEFAULT_HEADER_HEIGHT
-  const attributeHeight = DEFAULT_ATTRIBUTE_HEIGHT
-  const methodHeight = DEFAULT_METHOD_HEIGHT
-  const padding = DEFAULT_PADDING
+    ? LAYOUT.DEFAULT_HEADER_HEIGHT_WITH_STEREOTYPE
+    : LAYOUT.DEFAULT_HEADER_HEIGHT
+  const attributeHeight = LAYOUT.DEFAULT_ATTRIBUTE_HEIGHT
+  const methodHeight = LAYOUT.DEFAULT_METHOD_HEIGHT
+  const padding = LAYOUT.DEFAULT_PADDING
 
   const assessments = useDiagramStore(useShallow((state) => state.assessments))
 
@@ -57,8 +46,8 @@ export const ClassSVG = ({
   const processedMethods = processElements(methods)
   const nodeScore = assessments[id]?.score
 
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
   const { fillColor, strokeColor, textColor } = getCustomColorsFromData(data)
 
   return (
@@ -74,15 +63,20 @@ export const ClassSVG = ({
         width={width}
         itemHeight={headerHeight}
         yOffset={0}
+        // The node wrapper rings the whole class; a header ring would double it.
+        highlightable={false}
+        badge={
+          showAssessmentResults ? (
+            <AssessmentIcon score={nodeScore} x={width - 15} y={-15} />
+          ) : undefined
+        }
       >
-        {/* Base rectangle with fill */}
         <StyledRect
           x={0}
           y={0}
           width={width}
           height={height}
           stroke={strokeColor}
-          fill={fillColor}
         />
 
         {/* Header Section */}
@@ -92,66 +86,60 @@ export const ClassSVG = ({
           name={name}
           width={width}
           headerHeight={headerHeight}
+          isAbstract={isAbstract}
           textColor={textColor}
           fill={fillColor}
         />
-
-        {/* Attributes Section */}
-        {attributes.length > 0 && (
-          <>
-            {/* Separation Line After Header */}
-            <SeparationLine
-              y={headerHeight}
-              width={width}
-              strokeColor={strokeColor}
-            />
-            <RowBlockSection
-              items={processedAttributes}
-              padding={padding}
-              itemHeight={attributeHeight}
-              width={width}
-              offsetFromTop={headerHeight}
-              showAssessmentResults={showAssessmentResults}
-              itemElementType="attribute"
-            />
-          </>
-        )}
-
-        {/* Methods Section */}
-        {methods.length > 0 && (
-          <>
-            <SeparationLine
-              y={headerHeight + attributes.length * attributeHeight}
-              width={width}
-              strokeColor={strokeColor}
-            />
-            <RowBlockSection
-              items={processedMethods}
-              padding={padding}
-              itemHeight={methodHeight}
-              width={width}
-              offsetFromTop={headerHeight + attributes.length * methodHeight}
-              showAssessmentResults={showAssessmentResults}
-              itemElementType="method"
-            />
-          </>
-        )}
-
-        {showAssessmentResults && (
-          <AssessmentIcon score={nodeScore} x={width - 15} y={-15} />
-        )}
-
-        {/* Stroke-only frame on top to keep outline visible */}
-        <StyledRect
-          x={0}
-          y={0}
-          width={width}
-          height={height}
-          stroke={strokeColor}
-          fill="none"
-          pointerEvents="none"
-        />
       </AssessmentSelectableElement>
+
+      {/* The member sections sit OUTSIDE the class's selectable group on
+          purpose. SVG paints in document order, so anything inside that group
+          is painted before its selection rect — which would put a member's
+          assessment badge underneath the mark for the class, since the first
+          attribute's badge overhangs into the header band. Members carry their
+          own selectable groups, and the node wrapper still handles clicks
+          anywhere on the body. */}
+
+      {/* Attributes Section */}
+      {attributes.length >= 0 && (
+        <>
+          {/* Separation Line After Header */}
+          <SeparationLine
+            y={headerHeight}
+            width={width}
+            strokeColor={strokeColor}
+          />
+          <RowBlockSection
+            items={processedAttributes}
+            padding={padding}
+            itemHeight={attributeHeight}
+            width={width}
+            offsetFromTop={headerHeight}
+            showAssessmentResults={showAssessmentResults}
+            itemElementType="attribute"
+          />
+        </>
+      )}
+
+      {/* Methods Section */}
+      {methods.length >= 0 && (
+        <>
+          <SeparationLine
+            y={headerHeight + attributes.length * attributeHeight}
+            width={width}
+            strokeColor={strokeColor}
+          />
+          <RowBlockSection
+            items={processedMethods}
+            padding={padding}
+            itemHeight={methodHeight}
+            width={width}
+            offsetFromTop={headerHeight + attributes.length * methodHeight}
+            showAssessmentResults={showAssessmentResults}
+            itemElementType="method"
+          />
+        </>
+      )}
     </svg>
   )
 }

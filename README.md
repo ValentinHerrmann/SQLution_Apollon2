@@ -1,58 +1,129 @@
-# Apollon2 Re-Engineering
+<div align="center">
 
-Welcome to the Apollon2 Monorepo! This repository uses **npm workspaces** to manage multiple packages (including a server, webapp, and library) in a single codebase.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/static/img/apollon-lockup-dark.png" />
+  <img src="docs/static/img/apollon-lockup-light.png" alt="Apollon" height="84" />
+</picture>
 
-## 📚 Documentation
+[![npm version](https://img.shields.io/npm/v/@tumaet/apollon)](https://www.npmjs.com/package/@tumaet/apollon)
+[![npm downloads](https://img.shields.io/npm/dm/@tumaet/apollon)](https://www.npmjs.com/package/@tumaet/apollon)
+[![npm license](https://img.shields.io/npm/l/@tumaet/apollon)](./LICENSE)
 
-**For complete documentation, setup instructions, and guides, please visit:**
+**Open-source UML modeling editor for the web.** Draw 13 UML and modeling diagram types (class, component, activity, BPMN, SFC, and more) in the browser, collaborate in real time, and export to SVG, PNG, PDF, PPTX, or JSON.
 
-**🔗 [https://apollon2.readthedocs.io/en/latest/](https://apollon2.readthedocs.io/en/latest/)**
+<p>
+  <a href="https://apollon.aet.cit.tum.de">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/static/img/apollon-btn-demo-dark.png" />
+      <img src="docs/static/img/apollon-btn-demo-light.png" alt="Try the live demo" height="64" />
+    </picture>
+  </a>
+  <a href="https://ls1intum.github.io/Apollon/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/static/img/apollon-btn-docs-dark.png" />
+      <img src="docs/static/img/apollon-btn-docs-light.png" alt="Documentation" height="64" />
+    </picture>
+  </a>
+</p>
 
-## Quick Start
+[npm package](https://www.npmjs.com/package/@tumaet/apollon) · [VS Code extension](https://marketplace.visualstudio.com/items?itemName=aet-tum.apollon-extension)
 
-```bash
-# Clone the repository
-git clone git@github.com:ls1intum/Apollon2.git
-cd Apollon2
+<a href="https://apollon.aet.cit.tum.de">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/static/img/apollon-editor-dark.png" />
+    <img src="docs/static/img/apollon-editor-light.png" alt="The Apollon editor showing a UML class diagram, with the element palette on the left and the app chrome on top" />
+  </picture>
+</a>
 
-# Use correct Node.js version
-nvm install && nvm use
+</div>
 
-# Install dependencies
-npm install
+## Why Apollon
 
-# Build all packages
-npm run build
+- **Made for learning and teaching.** Apollon powers the UML modeling exercises and grading workflows in [Artemis](https://artemis.tum.de/), TUM's interactive learning platform, and holds up in large university courses — but it is a general-purpose editor that works just as well outside the classroom.
+- **Embeddable first.** The editor is an npm library with an imperative API (plus a React component); the standalone web app and the VS Code extension in this repo are built on top of it. If you need diagramming inside your own product, you embed the exact editor you see in the demo.
+- **Framework-agnostic.** One API works from Angular, Vue, Svelte, vanilla JS, or React.
+- **Real-time collaboration built in.** Opt-in multi-user editing over [Yjs](https://yjs.dev/), with any transport you like.
+- **MIT-licensed and self-hostable.** No account, no cloud dependency — run the whole stack yourself.
 
-# Setup DB (make sure docker is running)
-npm run start:localdb
+## What's in this repo
 
-# Start the project
-npm run start
+This monorepo contains every piece of the Apollon platform:
+
+- **[`library/`](./library)**: the embeddable `@tumaet/apollon` editor ([npm](https://www.npmjs.com/package/@tumaet/apollon)).
+- **[`standalone/`](./standalone)**: the standalone web app (server and webapp) built on the library.
+- **[`vscode-extension/`](./vscode-extension)**: the Apollon VS Code extension.
+- **[`docs/`](./docs)**: the Docusaurus documentation site, published at <https://ls1intum.github.io/Apollon/>.
+
+## Use the library
+
+```sh
+npm install @tumaet/apollon
 ```
 
-## What's in the Documentation
+npm 7+, pnpm 8+, and Bun pull in the required peer dependencies automatically
+(`react`, `react-dom`, `@xyflow/react`, `yjs`, `y-protocols`) — the editor
+renders on the host's single React and Yjs instance instead of bundling its
+own. Yarn never installs peers, so list them in the install command there. See
+the [published library documentation](https://ls1intum.github.io/Apollon/library/)
+for the API and per-framework guides.
 
-- **🚀 [Getting Started](https://apollon2.readthedocs.io/en/latest/getting-started/requirements.html)** - Requirements and setup instructions
-- **💻 [Development](https://apollon2.readthedocs.io/en/latest/development/project-structure.html)** - Project structure and development workflow
-- **📱 [Mobile Development](https://apollon2.readthedocs.io/en/latest/mobile/ios-android-setup.html)** - iOS and Android setup with Capacitor
-- **🚀 [Deployment](https://apollon2.readthedocs.io/en/latest/deployment/github-actions.html)** - Github actions deployment and NPM publishing
-- **🛠️ [Troubleshooting](https://apollon2.readthedocs.io/en/latest/troubleshooting/common-issues.html)** - Common issues and solutions
-- **🤝 [Contributing](https://apollon2.readthedocs.io/en/latest/contributing.html)** - How to contribute to the project
+## Run the stack locally
+
+```sh
+git clone git@github.com:ls1intum/Apollon.git
+cd Apollon
+nvm install && nvm use
+pnpm install
+pnpm dev
+```
+
+`pnpm dev` starts three processes together:
+
+- Library build watch (auto-rebuilds on changes).
+- Server (`tsx watch`) on a printed local HTTP port with a matching WebSocket relay port.
+- Webapp (Vite HMR) on a printed local dev URL.
+
+The launcher handles the setup:
+
+- Resolves port collisions for the webapp, server, WebSocket relay, and Redis.
+- Reuses an existing local Redis if one is running; otherwise it starts a Redis container on a free host port (Docker is only required in that case).
+- Needs no `.env` files. The defaults match the local setup.
+
+Override ports via `APOLLON_WEBAPP_PORT`, `APOLLON_SERVER_PORT`, `APOLLON_WS_PORT`, or `APOLLON_REDIS_PORT`.
+
+To preview the documentation site instead, run `pnpm dev:docs` from the repo root. It builds the library and starts the Docusaurus dev server.
+
+## Tech stack
+
+| Component     | Technology                                                           |
+| ------------- | -------------------------------------------------------------------- |
+| Library       | React, TypeScript, React Flow (`@xyflow/react`), Yjs, Zustand, Vite  |
+| Server        | Hono 4, Redis (RedisJSON), WebSocket relay                           |
+| Webapp        | React, TypeScript, Vite, shadcn-style UI (Base UI), Tailwind         |
+| Storage       | Redis with RedisJSON (diagrams expire after 120 days via native TTL) |
+| Reverse proxy | Traefik v3 (production)                                              |
 
 ## Requirements
 
-- **Node.js** (version specified in `.nvmrc`)
-- **npm** 7+ (for workspace support)
-- **Docker** (for containerized deployment)
+- **Node.js**: version pinned in [`.nvmrc`](./.nvmrc) (Node 24 LTS).
+- **pnpm 12+**: the package manager. The exact version is pinned in the `packageManager` field of `package.json`. Install it with `npm install -g pnpm@12`.
+- **Docker**: only when `pnpm dev` needs to start a local Redis.
+
+## Documentation
+
+The docs are a [Docusaurus](https://docusaurus.io/) site published at <https://ls1intum.github.io/Apollon/>. Sources live in [`docs/`](./docs); preview them locally with `pnpm dev:docs`.
+
+- [Library](https://ls1intum.github.io/Apollon/library/): embedding the `@tumaet/apollon` editor.
+- [User Guide](https://ls1intum.github.io/Apollon/user/): getting started, requirements, and self-hosting.
+- [Contributor](https://ls1intum.github.io/Apollon/contributor/): project structure, scripts, deployment, and troubleshooting.
+- [Support](https://ls1intum.github.io/Apollon/user/support): getting help, and updating from the previous iPhone/iPad app.
+
+Operations, legal pages, and TUM DSMS material live in [`ops/`](./ops) in this repo.
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](https://apollon2.readthedocs.io/en/latest/contributing.html) for detailed instructions.
+Open an issue or a pull request at <https://github.com/ls1intum/Apollon>. Guidelines live in [`CONTRIBUTING.md`](./CONTRIBUTING.md); see also the [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).
 
-## Development with Hot Reload
+## License
 
-Run the full dev stack with hot reload:
-
-- npm run dev (from the repo root)
-- Starts: library build watch, server (tsx watch) on <http://localhost:8000>, webapp (Vite HMR) on <http://localhost:5173>
+MIT. See [LICENSE](./LICENSE).

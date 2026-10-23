@@ -1,120 +1,132 @@
-import { Tooltip } from "@mui/material"
-import { Typography } from "@/components/Typography"
-import Info from "@mui/icons-material/Info"
-import { APButton } from "../APButton"
-import { toast } from "react-toastify"
+import { useEffect, useState } from "react"
+import { useNavigate } from "@tanstack/react-router"
 import { useEditorContext, useModalContext } from "@/contexts"
-import { useNavigate } from "react-router"
+import { useModalProgress } from "@/contexts/ModalProgressContext"
 import { DiagramView } from "@/types"
-import { DiagramAPIManager } from "@/services/DiagramAPIManager"
-import { log } from "@/logger"
+import { usePersistenceModelStore } from "@/stores/usePersistenceModelStore"
+import { randomCollabName } from "@tumaet/apollon"
+import { sharedDiagramRoute } from "@/utils/sharedDiagramLinks"
+import { useSharedDiagramId } from "@/hooks/useSharedDiagramId"
+import {
+  HomeDialogActions,
+  HomeDialogContent,
+  HomeDialogField,
+  HomeDialogNotice,
+  HomeDialogTextInput,
+} from "./HomeDialog"
+import { ShareLinkRow, MODE_OPTIONS } from "./ShareLinkRow"
+import { useShareableDiagram } from "./useShareableDiagram"
+import { EmbedSnippetPanel } from "./EmbedSnippetPanel"
 
+/**
+ * In-editor "Share" dialog. Uploads a snapshot of the current diagram ONCE, then
+ * shows one link whose access mode (edit / collaborate / feedback) is a property
+ * of the link — switching it never creates a second copy. Reuses the shared
+ * share core with the dashboard dialog. If the diagram is already shared, it
+ * opens straight on the link.
+ */
 export const ShareModal = () => {
   const { editor } = useEditorContext()
-  const { closeModal } = useModalContext()
+  const { closeModal, openModal } = useModalContext()
   const navigate = useNavigate()
 
-  const handleShareButtonPress = async (viewType: DiagramView) => {
-    if (!editor) {
-      toast.error("Editor instance is not available.")
+  const modelData = editor?.model ?? null
+  const sharedId = useSharedDiagramId()
+  const share = useShareableDiagram(modelData, sharedId)
+
+  const [name, setName] = useState(
+    () => editor?.model?.title?.trim() || "Untitled Diagram"
+  )
+  const [collaborateName, setCollaborateName] = useState(
+    () => sessionStorage.getItem("apollon-collab-name") || ""
+  )
+  const hasLocalOriginal = Boolean(
+    usePersistenceModelStore.getState().currentModelId
+  )
+
+  const { setLoading } = useModalProgress()
+  useEffect(() => setLoading(share.isCreating), [share.isCreating, setLoading])
+
+  const openShared = () => {
+    if (!share.diagramId) return
+    if (share.mode === DiagramView.COLLABORATE) {
+      const id = share.diagramId
+      openModal("COLLABORATE_NAME", {
+        initialName: collaborateName.trim() || randomCollabName(),
+        onConfirm: (chosen: string) => {
+          sessionStorage.setItem("apollon-collab-name", chosen)
+          setCollaborateName(chosen)
+          closeModal()
+          navigate(sharedDiagramRoute(id, share.mode))
+        },
+      })
       return
     }
-
-    try {
-      const model = editor.model
-      const { id: diagramID } = await DiagramAPIManager.createDiagram(model)
-
-      const newurl = `${window.location.origin}/${diagramID}?view=${viewType}`
-      copyToClipboard(newurl)
-      navigate(`/${diagramID}?view=${viewType}`)
-
-      toast.success(
-        `The link has been copied to your clipboard and can be shared to collaborate, simply by pasting the link. You can re-access the link by going to share menu.`,
-        {
-          autoClose: 10000,
-        }
-      )
-      closeModal()
-    } catch (err) {
-      log.error("Error creating diagram:", err as Error)
-      toast.error("Could not create diagram.")
-    }
-  }
-
-  const copyToClipboard = (link: string) => {
-    navigator.clipboard.writeText(link)
+    closeModal()
+    navigate(sharedDiagramRoute(share.diagramId, share.mode))
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <Typography>
-          After sharing, this diagram will be accessible to everyone with access
-          to the link for at least 12 weeks{" "}
-          <Tooltip title="Copy link to clipboard">
-            <Info />
-          </Tooltip>
-        </Typography>
-      </div>
+    <HomeDialogContent testId="share-modal-content">
+      {/* Heads-up only on create; the shared view's field label + dropdown say enough. */}
+      {!share.diagramId && (
+        <HomeDialogNotice>
+          A copy is uploaded so anyone with the link can open it — your local
+          diagram stays untouched.
+        </HomeDialogNotice>
+      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-        <div>
-          <APButton
-            variant="outline"
-            fullWidth
-            onClick={() => handleShareButtonPress(DiagramView.EDIT)}
-          >
-            Edit
-          </APButton>
-        </div>
-        <div>
-          <APButton
-            variant="outline"
-            fullWidth
-            onClick={() => handleShareButtonPress(DiagramView.COLLABORATE)}
-          >
-            Collaborate
-          </APButton>
-        </div>
-        <div>
-          <APButton
-            variant="outline"
-            fullWidth
-            onClick={() => handleShareButtonPress(DiagramView.GIVE_FEEDBACK)}
-          >
-            Give Feedback
-          </APButton>
-        </div>
-        <div>
-          <APButton
-            variant="outline"
-            fullWidth
-            onClick={() => handleShareButtonPress(DiagramView.SEE_FEEDBACK)}
-          >
-            See Feedback
-          </APButton>
-        </div>
-      </div>
-      <fieldset className="border border-gray-300 p-2 rounded-xl w-fill ">
-        <legend className="text-sm px-2 text-[var(--apollon2-primary-contrast)]">
-          Recently shared Diagram:
-        </legend>
-        <div className="flex items-center ">
-          <input
+      {!share.diagramId && (
+        <HomeDialogField label="Name" htmlFor="share-diagram-name">
+          <HomeDialogTextInput
+            id="share-diagram-name"
             type="text"
-            value={window.location.href}
-            readOnly
-            className="grow h-[42px] px-3 py-2 border rounded-md border-r-0 rounded-r-none border-[var(--apollon2-primary-contrast)] bg-[var(--apollon2-background)] text-[var(--apollon2-primary-contrast)]"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={120}
+            disabled={share.isCreating}
+            placeholder="Diagram name"
           />
-          <APButton
-            onClick={() => copyToClipboard(window.location.href)}
-            variant="outline"
-            className=" rounded-l-none h-[42px]"
-          >
-            Copy Link
-          </APButton>
-        </div>
-      </fieldset>
-    </div>
+        </HomeDialogField>
+      )}
+
+      {share.diagramId && (
+        <>
+          <HomeDialogField label="Anyone with this link">
+            <ShareLinkRow
+              link={share.link}
+              copied={share.copied}
+              onCopy={() => void share.copy()}
+              mode={share.mode}
+              options={MODE_OPTIONS}
+              onSelectMode={share.selectMode}
+            />
+          </HomeDialogField>
+
+          {/* No opacity dim on the note below: `--home-text-secondary` is
+              already a muted secondary tone (~6.4:1 on the dialog); a 70%
+              opacity dropped it to ~3.2:1, under WCAG AA. */}
+          {hasLocalOriginal && (
+            <p className="text-xs text-[var(--home-text-secondary)]">
+              Your local copy and its history stay on this device.
+            </p>
+          )}
+
+          <EmbedSnippetPanel diagramId={share.diagramId} title={name} />
+        </>
+      )}
+
+      <HomeDialogActions
+        cancelLabel={share.diagramId ? "Close" : "Cancel"}
+        confirmLabel={share.diagramId ? "Open diagram" : "Create share link"}
+        loadingLabel="Creating..."
+        loading={share.isCreating}
+        confirmDisabled={!share.diagramId && !name.trim()}
+        onCancel={closeModal}
+        onConfirm={() =>
+          share.diagramId ? openShared() : void share.create(name)
+        }
+      />
+    </HomeDialogContent>
   )
 }

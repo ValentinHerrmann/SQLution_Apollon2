@@ -1,5 +1,9 @@
 import { BaseEdge } from "@xyflow/react"
-import { BaseEdgeProps, CommonEdgeElements } from "../GenericEdge"
+import {
+  BaseEdgeProps,
+  CommonEdgeElements,
+  StraightEdgeControls,
+} from "../GenericEdge"
 import { EdgeMiddleLabels } from "../labelTypes/EdgeMiddleLabels"
 import { EdgeIncludeExtendLabel } from "../labelTypes/EdgeIncludeExtendLabel"
 import { useEdgeConfig } from "@/hooks/useEdgeConfig"
@@ -7,11 +11,11 @@ import { useStraightPathEdge } from "@/hooks/useStraightPathEdge"
 import { useDiagramStore, usePopoverStore } from "@/store/context"
 import { useShallow } from "zustand/shallow"
 import { useToolbar } from "@/hooks"
-import { useRef } from "react"
-import { EDGE_HIGHTLIGHT_STROKE_WIDTH } from "@/constants"
+import { EDGES } from "@/constants"
 import { FeedbackDropzone } from "@/components/wrapper/FeedbackDropzone"
 import { AssessmentSelectableWrapper } from "@/components"
 import { getCustomColorsFromDataForEdge } from "@/utils/layoutUtils"
+import { EdgeInlineMarkers } from "@/components/svgs/edges/InlineMarker"
 
 export const UseCaseEdge = ({
   id,
@@ -28,7 +32,6 @@ export const UseCaseEdge = ({
   targetHandleId,
   data,
 }: BaseEdgeProps) => {
-  const anchorRef = useRef<SVGSVGElement | null>(null)
   const { handleDelete } = useToolbar({ id })
 
   const config = useEdgeConfig(
@@ -59,7 +62,22 @@ export const UseCaseEdge = ({
     markerEnd,
     markerStart,
     strokeDashArray,
+    sourcePoint,
+    targetPoint,
+    sourceNeighbor,
+    targetNeighbor,
+    route,
+    interior,
+    selectedWaypointIndex,
+    sourcePosition: renderSourcePosition,
+    targetPosition: renderTargetPosition,
     isDiagramModifiable,
+    canEditEndpoint,
+    handleEndpointPointerDown,
+    handleWaypointPointerDown,
+    handleGhostPointerDown,
+    handleWaypointDoubleClick,
+    handleWaypointKeyDown,
   } = useStraightPathEdge({
     id,
     type,
@@ -73,6 +91,7 @@ export const UseCaseEdge = ({
     targetPosition,
     sourceHandleId,
     targetHandleId,
+    data,
   })
 
   const { strokeColor, textColor } = getCustomColorsFromDataForEdge(data)
@@ -86,12 +105,21 @@ export const UseCaseEdge = ({
             key={markerKey}
             id={id}
             path={currentPath}
-            markerEnd={markerEnd}
             pointerEvents="none"
+            // Select/hover ride `.edge-overlay`, not RF's fat interaction ribbon,
+            // so the ribbon can't paint over a neighbour edge's handle. See GenericEdge.
+            interactionWidth={0}
             style={{
               stroke: strokeColor,
               strokeDasharray: strokeDashArray,
             }}
+          />
+
+          <EdgeInlineMarkers
+            pathD={currentPath}
+            markerEnd={markerEnd}
+            markerStart={markerStart}
+            strokeColor={strokeColor}
           />
 
           <path
@@ -99,19 +127,37 @@ export const UseCaseEdge = ({
             className="edge-overlay"
             d={overlayPath}
             fill="none"
-            strokeWidth={EDGE_HIGHTLIGHT_STROKE_WIDTH}
+            strokeWidth={EDGES.EDGE_HIGHLIGHT_STROKE_WIDTH}
             pointerEvents="stroke"
             style={{ opacity: 0.4 }}
+          />
+
+          <StraightEdgeControls
+            route={route}
+            interior={interior}
+            selectedWaypointIndex={selectedWaypointIndex}
+            sourcePoint={sourcePoint}
+            targetPoint={targetPoint}
+            sourcePosition={renderSourcePosition}
+            targetPosition={renderTargetPosition}
+            sourceNeighbor={sourceNeighbor}
+            targetNeighbor={targetNeighbor}
+            isDiagramModifiable={isDiagramModifiable}
+            canEditEndpoint={canEditEndpoint}
+            onEndpointPointerDown={handleEndpointPointerDown}
+            onWaypointPointerDown={handleWaypointPointerDown}
+            onWaypointDoubleClick={handleWaypointDoubleClick}
+            onWaypointKeyDown={handleWaypointKeyDown}
+            onGhostPointerDown={handleGhostPointerDown}
           />
         </g>
 
         <EdgeMiddleLabels
           label={data?.label}
-          pathMiddlePosition={edgeData.pathMiddlePosition}
-          isMiddlePathHorizontal={edgeData.isMiddlePathHorizontal}
           showRelationshipLabels={showRelationshipLabels}
-          sourcePoint={edgeData.sourcePoint}
-          targetPoint={edgeData.targetPoint}
+          sourcePoint={edgeData.labelSourcePoint}
+          targetPoint={edgeData.labelTargetPoint}
+          anchorPoint={edgeData.pathMiddlePosition}
           isUseCasePath={true}
           textColor={textColor}
         />
@@ -127,17 +173,19 @@ export const UseCaseEdge = ({
           showRelationshipLabels={
             type === "UseCaseInclude" || type === "UseCaseExtend"
           }
-          pathMiddlePosition={edgeData.pathMiddlePosition}
-          sourcePoint={edgeData.sourcePoint}
-          targetPoint={edgeData.targetPoint}
+          sourcePoint={edgeData.labelSourcePoint}
+          targetPoint={edgeData.labelTargetPoint}
+          anchorPoint={edgeData.pathMiddlePosition}
+          textColor={textColor}
         />
 
         <CommonEdgeElements
           id={id}
+          data={data}
           pathMiddlePosition={edgeData.pathMiddlePosition}
+          toolbarPosition={edgeData.toolbarPosition}
           isDiagramModifiable={isDiagramModifiable}
           assessments={assessments}
-          anchorRef={anchorRef}
           handleDelete={handleDelete}
           setPopOverElementId={setPopOverElementId}
           type={type}

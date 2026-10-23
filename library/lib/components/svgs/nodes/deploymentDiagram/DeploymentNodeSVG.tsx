@@ -1,5 +1,5 @@
-import { CustomText, StyledRect } from "@/components"
-import { LINE_WIDTH } from "@/constants"
+import { StereotypeAndName, StyledRect } from "@/components"
+import { LAYOUT } from "@/constants"
 import { useDiagramStore } from "@/store"
 import { useShallow } from "zustand/shallow"
 import AssessmentIcon from "../../AssessmentIcon"
@@ -16,16 +16,18 @@ export const DeploymentNodeSVG: React.FC<Props> = ({
   width,
   height,
   svgAttributes,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
   showAssessmentResults = false,
   data,
 }) => {
   const { name, stereotype, isComponentHeaderShown } = data
+  const hasStereotype =
+    !!isComponentHeaderShown && !!stereotype && stereotype.length > 0
 
   const assessments = useDiagramStore(useShallow((state) => state.assessments))
   const nodeScore = assessments[id]?.score
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
   const { fillColor, strokeColor, textColor } = getCustomColorsFromData(data)
 
   return (
@@ -41,14 +43,14 @@ export const DeploymentNodeSVG: React.FC<Props> = ({
           {/* Top face */}
           <path
             d={`M 0 8 l 8 -8 H ${width} l -8 8 Z`}
-            strokeWidth={LINE_WIDTH}
+            strokeWidth={LAYOUT.LINE_WIDTH}
             stroke={strokeColor}
             fill={fillColor}
           />
           {/* Right face */}
           <path
             d={`M ${width} 0 V ${height - 8} l -8 8 V 8 Z`}
-            strokeWidth={LINE_WIDTH}
+            strokeWidth={LAYOUT.LINE_WIDTH}
             stroke={strokeColor}
             fill={fillColor}
           />
@@ -63,30 +65,17 @@ export const DeploymentNodeSVG: React.FC<Props> = ({
           />
         </g>
 
-        {/* Name Text */}
-        <CustomText
-          x="50%"
-          y={30}
-          textAnchor="middle"
-          fontWeight="bold"
-          dominantBaseline="middle"
+        <StereotypeAndName
+          name={name}
+          stereotype={stereotype}
+          showStereotype={hasStereotype}
+          width={width}
+          height={height}
+          sideReserve={24}
+          verticalAnchor="top"
+          nameTextDecoration="underline"
           fill={textColor}
-        >
-          {isComponentHeaderShown && stereotype.length > 0 ? (
-            <>
-              <tspan x="50%" dy="-8" fontSize="85%">
-                {`«${stereotype}»`}
-              </tspan>
-              <tspan x="50%" dy="18" textDecoration="underline">
-                {name}
-              </tspan>
-            </>
-          ) : (
-            <tspan x="50%" dy="0" textDecoration="underline">
-              {name}
-            </tspan>
-          )}
-        </CustomText>
+        />
       </g>
 
       {showAssessmentResults && (

@@ -1,11 +1,14 @@
-import { NodeProps, NodeResizer, type Node } from "@xyflow/react"
-import { DefaultNodeWrapper, HandleId } from "../wrappers"
+import { NodeProps, type Node } from "@xyflow/react"
+import { usePopoverAnchor } from "@/hooks/usePopoverAnchor"
+import {
+  DefaultNodeWrapper,
+  FOUR_WAY_HANDLES_PRESET,
+  NodeResizer,
+} from "../wrappers"
 import { useHandleOnResize } from "@/hooks"
 import { DefaultNodeProps } from "@/types"
-import { useRef } from "react"
 import { PopoverManager } from "@/components/popovers/PopoverManager"
 import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
-import { useIsOnlyThisElementSelected } from "@/hooks/useIsOnlyThisElementSelected"
 import { FlowchartDecisionNodeSVG } from "@/components"
 import { NodeToolbar } from "@/components/toolbars/NodeToolbar"
 
@@ -16,10 +19,9 @@ export function FlowchartDecision({
   data,
   parentId,
 }: NodeProps<Node<DefaultNodeProps>>) {
-  const svgWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [anchorEl, anchorRef] = usePopoverAnchor()
   const { onResize } = useHandleOnResize(parentId)
   const isDiagramModifiable = useDiagramModifiable()
-  const selected = useIsOnlyThisElementSelected(id)
 
   if (!width || !height) {
     return null
@@ -30,26 +32,16 @@ export function FlowchartDecision({
       width={width}
       height={height}
       elementId={id}
-      hiddenHandles={[
-        HandleId.TopLeft,
-        HandleId.TopRight,
-        HandleId.RightTop,
-        HandleId.RightBottom,
-        HandleId.BottomRight,
-        HandleId.BottomLeft,
-        HandleId.LeftBottom,
-        HandleId.LeftTop,
-      ]}
+      hiddenHandles={FOUR_WAY_HANDLES_PRESET}
     >
       <NodeToolbar elementId={id} />
       <NodeResizer
-        isVisible={isDiagramModifiable && !!selected}
+        isVisible={isDiagramModifiable}
         onResize={onResize}
         minHeight={50}
         minWidth={50}
-        handleStyle={{ width: 8, height: 8 }}
       />
-      <div ref={svgWrapperRef}>
+      <div ref={anchorRef}>
         <FlowchartDecisionNodeSVG
           width={width}
           height={height}
@@ -60,7 +52,7 @@ export function FlowchartDecision({
       </div>
 
       <PopoverManager
-        anchorEl={svgWrapperRef.current}
+        anchorEl={anchorEl}
         elementId={id}
         type="FlowchartDecision"
       />

@@ -1,4 +1,5 @@
-import { EdgeTypes } from "@xyflow/react"
+import type { EdgeTypes } from "@xyflow/react"
+import type { DiagramEdgeType } from "../modelElementTypes"
 import { ClassDiagramEdge } from "./edgeTypes/ClassDiagramEdge"
 import { ActivityDiagramEdge } from "./edgeTypes/ActivityDiagramEdge"
 import { UseCaseEdge } from "./edgeTypes/UseCaseDiagramEdge"
@@ -60,7 +61,7 @@ export const diagramEdgeTypes = {
   BPMNMessageFlow: BPMNDiagramEdge,
   BPMNAssociationFlow: BPMNDiagramEdge,
   BPMNDataAssociationFlow: BPMNDiagramEdge,
-} satisfies EdgeTypes
+} satisfies Record<DiagramEdgeType, EdgeTypes[string]>
 
 export const edgeConfig = {
   // Class edges - all allow midpoint dragging
@@ -117,10 +118,10 @@ export const edgeConfig = {
 
   // Component edges - different midpoint settings
   ComponentDependency: { allowMidpointDragging: true },
-  ComponentProvidedInterface: { allowMidpointDragging: false },
-  ComponentRequiredInterface: { allowMidpointDragging: false },
-  ComponentRequiredThreeQuarterInterface: { allowMidpointDragging: false },
-  ComponentRequiredQuarterInterface: { allowMidpointDragging: false },
+  ComponentProvidedInterface: { allowMidpointDragging: true },
+  ComponentRequiredInterface: { allowMidpointDragging: true },
+  ComponentRequiredThreeQuarterInterface: { allowMidpointDragging: true },
+  ComponentRequiredQuarterInterface: { allowMidpointDragging: true },
 
   // Deployment edges - with relationship labels
   DeploymentAssociation: {
@@ -153,9 +154,8 @@ export const edgeConfig = {
   },
 } as const
 
-export type DiagramEdgeType = keyof typeof diagramEdgeTypes
+export type { DiagramEdgeType } from "../modelElementTypes"
 
-export interface IPoint {
-  x: number
-  y: number
-}
+// IPoint has one canonical definition in ./Connection; re-export it here so
+// `@/edges` keeps exposing it without a second, drift-prone declaration.
+export type { IPoint } from "./Connection"

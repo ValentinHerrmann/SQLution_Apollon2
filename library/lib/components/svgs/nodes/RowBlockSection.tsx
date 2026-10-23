@@ -5,6 +5,7 @@ import AssessmentIcon from "../AssessmentIcon"
 import { FeedbackDropzone } from "@/components/wrapper/FeedbackDropzone"
 import { AssessmentSelectableElement } from "@/components/AssessmentSelectableElement"
 import { getCustomColorsFromData } from "@/utils"
+import { LAYOUT } from "@/constants"
 
 interface RowBlockSectionProps {
   items: (ClassNodeElement & { score?: number })[]
@@ -38,28 +39,31 @@ export const RowBlockSection: FC<RowBlockSectionProps> = ({
             width={width}
             itemHeight={itemHeight}
             yOffset={y}
+            badge={
+              showAssessmentResults && typeof item.score === "number" ? (
+                <AssessmentIcon score={item.score} x={iconX} y={iconY} />
+              ) : undefined
+            }
           >
             <FeedbackDropzone elementId={item.id} elementType={itemElementType}>
               <rect
-                x={0.5}
-                y={y + 0.5}
-                width={width - 1}
-                height={itemHeight - 1}
+                x={LAYOUT.LINE_WIDTH / 2}
+                y={y + LAYOUT.LINE_WIDTH / 2}
+                width={width - LAYOUT.LINE_WIDTH}
+                height={itemHeight - LAYOUT.LINE_WIDTH}
                 fill={fillColor}
               />
               <CustomText
                 x={padding}
                 y={15 + index * itemHeight}
-                dominantBaseline="middle"
+                dominantBaseline="central"
                 textAnchor="start"
                 fill={textColor}
+                fontStyle={item.isAbstract ? "italic" : "normal"}
               >
                 {item.name}
               </CustomText>
             </FeedbackDropzone>
-            {showAssessmentResults && typeof item.score === "number" && (
-              <AssessmentIcon score={item.score} x={iconX} y={iconY} />
-            )}
           </AssessmentSelectableElement>
         )
       })}

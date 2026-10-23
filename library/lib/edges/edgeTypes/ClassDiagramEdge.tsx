@@ -1,17 +1,10 @@
-import { BaseEdge } from "@xyflow/react"
-import {
-  BaseEdgeProps,
-  EdgeEndpointMarkers,
-  CommonEdgeElements,
-} from "../GenericEdge"
+import { BaseEdgeProps, StepEdgeBody, CommonEdgeElements } from "../GenericEdge"
 import { EdgeEndLabels } from "../labelTypes/EdgeEndLabels"
 import { useEdgeConfig } from "@/hooks/useEdgeConfig"
 import { useStepPathEdge } from "@/hooks/useStepPathEdge"
 import { useDiagramStore, usePopoverStore } from "@/store/context"
 import { useShallow } from "zustand/shallow"
 import { useToolbar } from "@/hooks"
-import { useRef } from "react"
-import { EDGE_HIGHTLIGHT_STROKE_WIDTH } from "@/constants"
 import { FeedbackDropzone } from "@/components/wrapper/FeedbackDropzone"
 import { AssessmentSelectableWrapper } from "@/components"
 import { getCustomColorsFromDataForEdge } from "@/utils"
@@ -31,7 +24,6 @@ export const ClassDiagramEdge = ({
   targetHandleId,
   data,
 }: BaseEdgeProps) => {
-  const anchorRef = useRef<SVGSVGElement | null>(null)
   const { handleDelete } = useToolbar({ id })
 
   const config = useEdgeConfig(
@@ -47,10 +39,6 @@ export const ClassDiagramEdge = ({
 
   const allowMidpointDragging =
     "allowMidpointDragging" in config ? config.allowMidpointDragging : true
-  const enableStraightPath =
-    "enableStraightPath" in config
-      ? (config.enableStraightPath as boolean)
-      : true
 
   const { assessments } = useDiagramStore(
     useShallow((state) => ({
@@ -67,9 +55,10 @@ export const ClassDiagramEdge = ({
     edgeData,
     currentPath,
     overlayPath,
-    midpoints,
+    bendHandles,
+    isBendDragging,
+    draggingHandleSegmentIndex,
     hasInitialCalculation,
-    isReconnectingRef,
     markerEnd,
     markerStart,
     strokeDashArray,
@@ -77,7 +66,10 @@ export const ClassDiagramEdge = ({
     handleEndpointPointerDown,
     sourcePoint,
     targetPoint,
+    sourcePosition: renderSourcePosition,
+    targetPosition: renderTargetPosition,
     isDiagramModifiable,
+    canEditEndpoint,
   } = useStepPathEdge({
     id,
     type,
@@ -93,8 +85,6 @@ export const ClassDiagramEdge = ({
     targetHandleId,
     data,
     allowMidpointDragging,
-    enableReconnection: true,
-    enableStraightPath,
   })
 
   const { strokeColor, textColor } = getCustomColorsFromDataForEdge(data)
@@ -103,65 +93,30 @@ export const ClassDiagramEdge = ({
   return (
     <AssessmentSelectableWrapper elementId={id} asElement="g">
       <FeedbackDropzone elementId={id} asElement="path" elementType={type}>
-        <g className="edge-container">
-          <BaseEdge
-            key={markerKey}
-            id={id}
-            path={currentPath}
-            markerEnd={isReconnectingRef.current ? undefined : markerEnd}
-            pointerEvents="none"
-            style={{
-              stroke: strokeColor,
-              strokeDasharray: isReconnectingRef.current
-                ? "none"
-                : strokeDashArray,
-              transition: hasInitialCalculation
-                ? "opacity 0.1s ease-in"
-                : "none",
-              opacity: 1,
-            }}
-          />
-
-          <path
-            ref={pathRef}
-            className="edge-overlay"
-            d={overlayPath}
-            fill="none"
-            strokeWidth={EDGE_HIGHTLIGHT_STROKE_WIDTH}
-            pointerEvents="stroke"
-            style={{
-              opacity: isReconnectingRef.current ? 0 : 0.4,
-            }}
-          />
-
-          <EdgeEndpointMarkers
-            sourcePoint={sourcePoint}
-            targetPoint={targetPoint}
-            isDiagramModifiable={isDiagramModifiable}
-            diagramType="step"
-            pathType="step"
-            onSourcePointerDown={(e) => handleEndpointPointerDown(e, "source")}
-            onTargetPointerDown={(e) => handleEndpointPointerDown(e, "target")}
-          />
-
-          {isDiagramModifiable &&
-            !isReconnectingRef.current &&
-            allowMidpointDragging &&
-            midpoints.map((point, midPointIndex) => (
-              <circle
-                className="edge-circle"
-                pointerEvents="all"
-                key={`${id}-midpoint-${midPointIndex}`}
-                cx={point.x}
-                cy={point.y}
-                r={10}
-                fill="lightgray"
-                stroke="none"
-                style={{ cursor: "grab", zIndex: 9999 }}
-                onPointerDown={(e) => handlePointerDown(e, midPointIndex)}
-              />
-            ))}
-        </g>
+        <StepEdgeBody
+          id={id}
+          markerKey={markerKey}
+          currentPath={currentPath}
+          overlayPath={overlayPath}
+          pathRef={pathRef}
+          strokeColor={strokeColor}
+          strokeDashArray={strokeDashArray}
+          hasInitialCalculation={hasInitialCalculation}
+          isBendDragging={isBendDragging}
+          draggingHandleSegmentIndex={draggingHandleSegmentIndex}
+          markerStart={markerStart}
+          markerEnd={markerEnd}
+          sourcePoint={sourcePoint}
+          targetPoint={targetPoint}
+          sourcePosition={renderSourcePosition}
+          targetPosition={renderTargetPosition}
+          isDiagramModifiable={isDiagramModifiable}
+          canEditEndpoint={canEditEndpoint}
+          handleEndpointPointerDown={handleEndpointPointerDown}
+          allowMidpointDragging={allowMidpointDragging}
+          bendHandles={bendHandles}
+          handlePointerDown={handlePointerDown}
+        />
 
         <EdgeEndLabels
           data={data}
@@ -170,17 +125,18 @@ export const ClassDiagramEdge = ({
           sourceY={sourceY}
           targetX={targetX}
           targetY={targetY}
-          sourcePosition={sourcePosition}
-          targetPosition={targetPosition}
+          sourcePosition={renderSourcePosition}
+          targetPosition={renderTargetPosition}
           textColor={textColor}
         />
 
         <CommonEdgeElements
           id={id}
+          data={data}
           pathMiddlePosition={edgeData.pathMiddlePosition}
+          toolbarPosition={edgeData.toolbarPosition}
           isDiagramModifiable={isDiagramModifiable}
           assessments={assessments}
-          anchorRef={anchorRef}
           handleDelete={handleDelete}
           setPopOverElementId={setPopOverElementId}
           type={type}

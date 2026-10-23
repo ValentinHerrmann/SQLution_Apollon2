@@ -1,11 +1,14 @@
-import { NodeProps, NodeResizer, type Node } from "@xyflow/react"
-import { DefaultNodeWrapper } from "@/nodes/wrappers"
+import { NodeProps, type Node } from "@xyflow/react"
+import { usePopoverAnchor } from "@/hooks/usePopoverAnchor"
+import {
+  DefaultNodeWrapper,
+  FOUR_WAY_HANDLES_PRESET,
+  NodeResizer,
+} from "@/nodes/wrappers"
 import { PetriNetTransitionSVG } from "@/components"
-import { useRef } from "react"
 import { DefaultNodeProps } from "@/types"
 import { PopoverManager } from "@/components/popovers/PopoverManager"
 import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
-import { useIsOnlyThisElementSelected } from "@/hooks/useIsOnlyThisElementSelected"
 import { NodeToolbar } from "@/components/toolbars/NodeToolbar"
 
 export function PetriNetTransition({
@@ -14,25 +17,29 @@ export function PetriNetTransition({
   height,
   data,
 }: NodeProps<Node<DefaultNodeProps>>) {
-  const svgWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [anchorEl, anchorRef] = usePopoverAnchor()
 
   const isDiagramModifiable = useDiagramModifiable()
-  const selected = useIsOnlyThisElementSelected(id)
 
   if (!width || !height) {
     return null
   }
 
   return (
-    <DefaultNodeWrapper elementId={id} width={width} height={height}>
+    <DefaultNodeWrapper
+      elementId={id}
+      width={width}
+      height={height}
+      hiddenHandles={FOUR_WAY_HANDLES_PRESET}
+    >
       <NodeToolbar elementId={id} />
       <NodeResizer
-        isVisible={isDiagramModifiable && !!selected}
+        isVisible={isDiagramModifiable}
         minWidth={40}
         minHeight={40}
       />
 
-      <div ref={svgWrapperRef}>
+      <div ref={anchorRef}>
         <PetriNetTransitionSVG
           width={width}
           height={height}
@@ -42,11 +49,7 @@ export function PetriNetTransition({
         />
       </div>
 
-      <PopoverManager
-        anchorEl={svgWrapperRef.current}
-        elementId={id}
-        type="default"
-      />
+      <PopoverManager anchorEl={anchorEl} elementId={id} type="default" />
     </DefaultNodeWrapper>
   )
 }

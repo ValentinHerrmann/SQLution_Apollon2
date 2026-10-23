@@ -1,13 +1,22 @@
-import { NodeProps, NodeResizer, type Node } from "@xyflow/react"
-import { DefaultNodeWrapper } from "../wrappers"
+import { NodeProps, type Node } from "@xyflow/react"
+import { usePopoverAnchor } from "@/hooks/usePopoverAnchor"
+import { DefaultNodeWrapper, NodeResizer } from "../wrappers"
 import { useHandleOnResize } from "@/hooks"
 import { DefaultNodeProps } from "@/types"
-import { useRef } from "react"
 import { PopoverManager } from "@/components/popovers/PopoverManager"
 import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
-import { useIsOnlyThisElementSelected } from "@/hooks/useIsOnlyThisElementSelected"
 import { UseCaseActorNodeSVG } from "@/components/svgs/nodes/useCaseDiagram/UseCaseActorNodeSVG"
 import { NodeToolbar } from "@/components/toolbars/NodeToolbar"
+
+// The actor node IS resizable, but `UseCaseActorNodeSVG` draws the stick
+// figure and the label at fixed pixel sizes — resizing grows the node's
+// bounding box (giving the label more room to wrap / the figure room to
+// breathe) without stretching the iconic figure or the label font.
+//
+// `minWidth` guarantees the stick figure (90px wide) never clips; `minHeight`
+// leaves room for the figure (110px) + a gap + one full label line.
+const ACTOR_MIN_WIDTH = 90
+const ACTOR_MIN_HEIGHT = 140
 
 export function UseCaseActor({
   id,
@@ -16,10 +25,9 @@ export function UseCaseActor({
   data,
   parentId,
 }: NodeProps<Node<DefaultNodeProps>>) {
-  const svgWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [anchorEl, anchorRef] = usePopoverAnchor()
   const { onResize } = useHandleOnResize(parentId)
   const isDiagramModifiable = useDiagramModifiable()
-  const selected = useIsOnlyThisElementSelected(id)
 
   if (!width || !height) {
     return null
@@ -29,13 +37,12 @@ export function UseCaseActor({
     <DefaultNodeWrapper width={width} height={height} elementId={id}>
       <NodeToolbar elementId={id} />
       <NodeResizer
-        isVisible={isDiagramModifiable && !!selected}
+        isVisible={isDiagramModifiable}
         onResize={onResize}
-        minHeight={50}
-        minWidth={50}
-        handleStyle={{ width: 8, height: 8 }}
+        minWidth={ACTOR_MIN_WIDTH}
+        minHeight={ACTOR_MIN_HEIGHT}
       />
-      <div ref={svgWrapperRef}>
+      <div ref={anchorRef}>
         <UseCaseActorNodeSVG
           width={width}
           height={height}
@@ -45,11 +52,7 @@ export function UseCaseActor({
         />
       </div>
 
-      <PopoverManager
-        anchorEl={svgWrapperRef.current}
-        elementId={id}
-        type="default"
-      />
+      <PopoverManager anchorEl={anchorEl} elementId={id} type="default" />
     </DefaultNodeWrapper>
   )
 }

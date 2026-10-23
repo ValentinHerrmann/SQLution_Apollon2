@@ -1,5 +1,6 @@
-import { CustomText } from "@/components"
-import { LINE_WIDTH } from "@/constants"
+import { MultilineText } from "@/components"
+import { maxLinesForHeight } from "@/utils/svgTextLayout"
+import { LAYOUT } from "@/constants"
 import { useDiagramStore } from "@/store"
 import { SVGComponentProps } from "@/types/SVG"
 import { useShallow } from "zustand/shallow"
@@ -16,15 +17,15 @@ export const BPMNAnnotationNodeSVG: React.FC<BPMNAnnotationNodeSVGProps> = ({
   height,
   data,
   svgAttributes,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
   id,
   showAssessmentResults = false,
 }) => {
   const { name } = data
   const assessments = useDiagramStore(useShallow((state) => state.assessments))
   const nodeScore = assessments[id]?.score
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
 
   const { strokeColor, textColor } = getCustomColorsFromData(data)
   const fillColor = data.fillColor || "none"
@@ -38,7 +39,7 @@ export const BPMNAnnotationNodeSVG: React.FC<BPMNAnnotationNodeSVGProps> = ({
     >
       <path
         d={`M20,0 L10,0 A 10 10 280 0 0 0 10 L0,${height - 10} A 10 10 180 0 0 10 ${height} L20, ${height}`}
-        strokeWidth={LINE_WIDTH}
+        strokeWidth={LAYOUT.LINE_WIDTH}
         stroke={strokeColor}
         fill={fillColor}
       />
@@ -51,15 +52,16 @@ export const BPMNAnnotationNodeSVG: React.FC<BPMNAnnotationNodeSVGProps> = ({
         stroke="none"
         strokeWidth={0}
       />
-      <CustomText
-        x={width / 2}
+      <MultilineText
+        text={name}
+        x={(width + 20) / 2}
         y={height / 2}
-        textAnchor="middle"
+        maxWidth={width - 28}
+        fontSize={LAYOUT.NAME_FONT_SIZE}
         fontWeight="bold"
         fill={textColor}
-      >
-        {name}
-      </CustomText>
+        maxLines={maxLinesForHeight(height - 16, LAYOUT.NAME_LINE_HEIGHT)}
+      />
 
       {showAssessmentResults && (
         <AssessmentIcon x={width - 15} y={-15} score={nodeScore} />

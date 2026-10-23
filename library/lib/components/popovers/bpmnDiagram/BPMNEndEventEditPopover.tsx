@@ -1,49 +1,57 @@
-import { Box, FormControl, InputLabel, MenuItem, Select } from "@mui/material"
+import { Select } from "@/components/ui"
+import { NodeStyleEditor } from "@/components/styleEditor"
+import { useReactiveNode } from "@/hooks"
 import { useReactFlow } from "@xyflow/react"
 import { PopoverProps } from "../types"
-import { BPMNEndEventType } from "@/types"
-import { TextField } from "@/components/ui"
+import { BPMNEventProps, BPMNEndEventType } from "@/types"
+import { supportsMultilineName } from "@/utils/nodeUtils"
+import { useLabels } from "@/i18n/useLabels"
+import { PopoverLayout, PopoverSection } from "../PopoverLayout"
 
 export const BPMNEndEventEditPopover: React.FC<PopoverProps> = ({
   elementId,
 }) => {
-  const { getNode, updateNodeData } = useReactFlow()
-  const node = getNode(elementId)
+  const t = useLabels()
+  const { updateNodeData } = useReactFlow()
+  const node = useReactiveNode(elementId)
   if (!node) return null
 
-  const data = node.data as { name?: string; eventType?: BPMNEndEventType }
+  const data = node.data as BPMNEventProps
 
-  const handleNameChange = (value: string) =>
-    updateNodeData(elementId, { name: value })
-  const handleTypeChange = (value: BPMNEndEventType) =>
-    updateNodeData(elementId, { eventType: value })
+  const END_TYPE_OPTIONS = [
+    { value: "default", label: t.bpmnDefault },
+    { value: "message", label: t.message },
+    { value: "escalation", label: t.bpmnEscalation },
+    { value: "error", label: t.bpmnError },
+    { value: "compensation", label: t.bpmnCompensation },
+    { value: "signal", label: t.bpmnSignal },
+    { value: "terminate", label: t.bpmnTerminate },
+  ]
+
+  const handleDataFieldUpdate = (key: string, value: string) => {
+    updateNodeData(elementId, { [key]: value })
+  }
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-      <TextField
-        size="small"
-        label="Name"
-        value={data.name ?? ""}
-        onChange={(e) => handleNameChange(e.target.value)}
+    <PopoverLayout title={t.endEvent}>
+      <NodeStyleEditor
+        handleDataFieldUpdate={(key, value) =>
+          handleDataFieldUpdate(key, value)
+        }
+        nodeData={data}
+        isMultilineName={supportsMultilineName(node.type)}
       />
-      <FormControl fullWidth size="small">
-        <InputLabel id="bpmn-end-type-label">End Type</InputLabel>
+
+      <PopoverSection title={t.type} divider>
         <Select
-          labelId="bpmn-end-type-label"
-          id="bpmn-end-type-select"
+          label={t.endType}
           value={data.eventType ?? "default"}
-          label="End Type"
-          onChange={(e) => handleTypeChange(e.target.value as BPMNEndEventType)}
-        >
-          <MenuItem value="default">Default</MenuItem>
-          <MenuItem value="message">Message</MenuItem>
-          <MenuItem value="escalation">Escalation</MenuItem>
-          <MenuItem value="error">Error</MenuItem>
-          <MenuItem value="compensation">Compensation</MenuItem>
-          <MenuItem value="signal">Signal</MenuItem>
-          <MenuItem value="terminate">Terminate</MenuItem>
-        </Select>
-      </FormControl>
-    </Box>
+          options={END_TYPE_OPTIONS}
+          onChange={(value) =>
+            handleDataFieldUpdate("eventType", value as BPMNEndEventType)
+          }
+        />
+      </PopoverSection>
+    </PopoverLayout>
   )
 }

@@ -1,9 +1,15 @@
-/* eslint-disable */
-import { UMLModel, ApollonNode, ApollonEdge, Assessment } from "../typings"
+/* eslint-disable @typescript-eslint/no-explicit-any --
+ * The v3 → v4 converter walks legacy JSON payloads with no shared schema, so
+ * every entry point has to accept `any` until it's narrowed inline. Replacing
+ * these with proper types would require defining the full v3/v2 envelope and
+ * isn't in scope here. */
+import type { UMLModel, ApollonNode, ApollonEdge, Assessment } from "../typings"
+import { transformEdges } from "../services/migration/EdgeTransformer"
+import { STRAIGHT_HOOK_EDGE_TYPES } from "../edges/edgeRoutingBehavior"
 import { UMLDiagramType } from "../types/DiagramType"
-import { ClassType } from "../types/nodes/enums"
-import { IPoint } from "../edges/Connection"
-import {
+import { ClassStereotype } from "../types/nodes/enums"
+import type { IPoint } from "../edges/Connection"
+import type {
   V3DiagramFormat,
   V3UMLModel,
   V3UMLElement,
@@ -13,8 +19,10 @@ import {
   V3Messages,
 } from "./v3Typings"
 import { log } from "../logger"
+import { applyTags, taggableElements } from "./tagUtils"
+import { INTERFACE } from "./geometry/routingConstants"
 
-import {
+import type {
   ClassNodeProps,
   ObjectNodeProps,
   CommunicationObjectNodeProps,
@@ -28,7 +36,41 @@ import {
   BPMNEventProps,
   ReachabilityGraphMarkingProps,
 } from "../types/nodes/NodeProps"
-import { MessageData } from "@/edges/EdgeProps"
+import type { MessageData } from "@/edges/EdgeProps"
+
+/** Version 4.2 introduces authored INTERIOR waypoints for straight-hook edges.
+ * Earlier 4.x files stored a full computed/rendered route in `data.points`; those
+ * values must not be reinterpreted as user-authored bends. */
+export const CURRENT_MODEL_VERSION = "4.2.0" as const
+const STRAIGHT_WAYPOINT_MODEL_MINOR = 2
+
+function normalizeImportedInterfaceGeometry(
+  nodeType: string,
+  position: { x: number; y: number },
+  width: number,
+  height: number
+): { position: { x: number; y: number }; width: number; height: number } {
+  const isInterfaceNode =
+    nodeType === "componentInterface" || nodeType === "deploymentInterface"
+
+  if (!isInterfaceNode) {
+    return { position, width, height }
+  }
+
+  if (width === INTERFACE.SIZE && height === INTERFACE.SIZE) {
+    return { position, width, height }
+  }
+
+  // Keep the node center stable while normalizing to the standard interface size.
+  return {
+    position: {
+      x: position.x + (width - INTERFACE.SIZE) / 2,
+      y: position.y + (height - INTERFACE.SIZE) / 2,
+    },
+    width: INTERFACE.SIZE,
+    height: INTERFACE.SIZE,
+  }
+}
 
 interface V2DiagramFormat {
   version: string
@@ -143,6 +185,14 @@ export function convertV3HandleToV4(v3Handle: string): string {
     RightBottom: "bottom-right",
     LeftTop: "top-left",
     LeftBottom: "bottom-left",
+
+    // Legacy iOS dialect for the top/bottom-edge quarter handles (web v3 uses
+    // RightTop/LeftBottom for the same ports). Without these they hit the
+    // lowercase fallback below, producing invalid handle ids that mis-route.
+    Topright: "top-right",
+    Topleft: "top-left",
+    Bottomright: "bottom-right",
+    Bottomleft: "bottom-left",
   }
 
   return handleMap[v3Handle] || v3Handle.toLowerCase()
@@ -170,7 +220,7 @@ export function convertV3NodeTypeToV4(v3Type: string): string {
     ActivityForkNode: "activityForkNode",
     ActivityForkNodeHorizontal: "activityForkNodeHorizontal",
     ActivityMergeNode: "activityMergeNode",
-    ActivityDecisionNode: "activityDecisionNode",
+    ActivityDecisionNode: "activityMergeNode",
     Activity: "activity",
 
     // Use Case Diagram
@@ -334,6 +384,17 @@ function calculateRelativePosition(
 }
 
 /**
+ * Order child elements top-to-bottom by bounds.y. V3 stored class/object
+ * attributes and methods as separate child elements and rendered them by
+ * vertical position (UMLElement.verticallySortedChildren); object key order is
+ * not a reliable proxy, so sort before folding them into a parent node.
+ * Mutates in place — callers pass a fresh `Object.values(...)` array.
+ */
+function sortedByBoundsY(elements: V3UMLElement[]): V3UMLElement[] {
+  return elements.sort((a, b) => (a.bounds?.y ?? 0) - (b.bounds?.y ?? 0))
+}
+
+/**
  * Convert V3 node data to V4 node data format
  */
 function convertV3NodeDataToV4(
@@ -356,7 +417,7 @@ function convertV3NodeDataToV4(
     case "Enumeration": {
       const attributes: Array<{ id: string; name: string }> = []
       const methods: Array<{ id: string; name: string }> = []
-      Object.values(allElements).forEach((childElement) => {
+      sortedByBoundsY(Object.values(allElements)).forEach((childElement) => {
         if (childElement.owner === element.id) {
           if (childElement.type === "ClassAttribute") {
             attributes.push({
@@ -384,14 +445,17 @@ function convertV3NodeDataToV4(
         }
       })
 
-      // Determine stereotype
-      let stereotype: ClassType | undefined
+      // Determine metaclass keyword (interface/enumeration) and the abstract
+      // modifier separately: UML abstractness is a property (italic name), not a
+      // keyword, so `AbstractClass` maps to `isAbstract`, never to a stereotype.
+      let stereotype: ClassStereotype | undefined
+      let isAbstract = false
       if (element.type === "AbstractClass") {
-        stereotype = ClassType.Abstract
+        isAbstract = true
       } else if (element.type === "Interface") {
-        stereotype = ClassType.Interface
+        stereotype = ClassStereotype.Interface
       } else if (element.type === "Enumeration") {
-        stereotype = ClassType.Enumeration
+        stereotype = ClassStereotype.Enumeration
       }
 
       const classData: ClassNodeProps = {
@@ -399,6 +463,7 @@ function convertV3NodeDataToV4(
         methods,
         attributes,
         ...(stereotype && { stereotype }),
+        ...(isAbstract && { isAbstract: true }),
       }
       return classData
     }
@@ -407,7 +472,7 @@ function convertV3NodeDataToV4(
       const attributes: Array<{ id: string; name: string }> = []
       const methods: Array<{ id: string; name: string }> = []
 
-      Object.values(allElements).forEach((childElement) => {
+      sortedByBoundsY(Object.values(allElements)).forEach((childElement) => {
         if (childElement.owner === element.id) {
           if (childElement.type === "ObjectAttribute") {
             attributes.push({
@@ -446,7 +511,7 @@ function convertV3NodeDataToV4(
     case "CommunicationObject": {
       const attributes: Array<{ id: string; name: string }> = []
       const methods: Array<{ id: string; name: string }> = []
-      Object.values(allElements).forEach((childElement) => {
+      sortedByBoundsY(Object.values(allElements)).forEach((childElement) => {
         if (childElement.owner === element.id) {
           if (childElement.type === "ObjectAttribute") {
             attributes.push({
@@ -636,6 +701,7 @@ function convertV3ElementToV4Node(
   element: V3UMLElement,
   allElements: Record<string, V3UMLElement>
 ): ApollonNode {
+  const nodeType = convertV3NodeTypeToV4(element.type)
   let position = { x: element.bounds.x, y: element.bounds.y }
   if (element.owner) {
     const parent = allElements[element.owner]
@@ -645,16 +711,22 @@ function convertV3ElementToV4Node(
   }
 
   const data = convertV3NodeDataToV4(element, allElements)
+  const normalizedGeometry = normalizeImportedInterfaceGeometry(
+    nodeType,
+    position,
+    element.bounds.width,
+    element.bounds.height
+  )
 
   const baseNode: ApollonNode = {
     id: element.id,
-    type: convertV3NodeTypeToV4(element.type) as any,
-    position,
-    width: element.bounds.width,
-    height: element.bounds.height,
+    type: nodeType as any,
+    position: normalizedGeometry.position,
+    width: normalizedGeometry.width,
+    height: normalizedGeometry.height,
     measured: {
-      width: element.bounds.width,
-      height: element.bounds.height,
+      width: normalizedGeometry.width,
+      height: normalizedGeometry.height,
     },
     data,
     ...(element.owner && { parentId: element.owner }),
@@ -679,6 +751,13 @@ function convertV3RelationshipToV4Edge(
       x: point.x + relationship.bounds.x,
       y: point.y + relationship.bounds.y,
     }))
+  }
+  // Straight-hook edges (use-case, syntax-tree, petri-net) render as diagonal lines
+  // through INTERIOR waypoints only. The legacy v3 `path` is the full rendered
+  // polyline including endpoints and was inert for these types, so importing it as
+  // waypoints would sprout spurious (double-endpoint) bends. Clear it.
+  if (STRAIGHT_HOOK_EDGE_TYPES.has(edgeType as string)) {
+    points = []
   }
 
   const edge: ApollonEdge = {
@@ -771,13 +850,30 @@ export function convertV3ToV4(v3Data: V3DiagramFormat | V3UMLModel): UMLModel {
   }
 
   return {
-    version: "4.0.0",
+    version: CURRENT_MODEL_VERSION,
     id,
     title,
     type: model.type as UMLDiagramType,
     nodes,
     edges,
     assessments,
+    interactive:
+      model.interactive &&
+      (Object.values(model.interactive.elements ?? {}).some(Boolean) ||
+        Object.values(model.interactive.relationships ?? {}).some(Boolean))
+        ? {
+            elements: Object.fromEntries(
+              Object.entries(model.interactive.elements ?? {}).filter(
+                ([, included]) => included
+              )
+            ),
+            relationships: Object.fromEntries(
+              Object.entries(model.interactive.relationships ?? {}).filter(
+                ([, included]) => included
+              )
+            ),
+          }
+        : undefined,
   }
 }
 
@@ -819,7 +915,147 @@ export function isV4Format(data: any): data is UMLModel {
     data.version &&
     data.version.startsWith("4.") &&
     Array.isArray(data.nodes) &&
-    Array.isArray(data.edges)
+    Array.isArray(data.edges) &&
+    data.edges.every(
+      (edge: unknown) =>
+        edge != null &&
+        typeof edge === "object" &&
+        ((edge as { data?: unknown }).data == null ||
+          typeof (edge as { data: unknown }).data === "object")
+    )
+  )
+}
+
+/**
+ * Bring class nodes from earlier 4.x models onto the current stereotype shape,
+ * in place and idempotently:
+ *   - `stereotype: "Abstract"` → `isAbstract: true` (abstractness is a modifier,
+ *     an italic name — not a keyword), shedding the now-absent keyword line's
+ *     10px of header height so the box isn't left with a dead band.
+ *   - `stereotype: "Interface" | "Enumeration"` → the lowercase keyword spelling
+ *     (`"interface"` / `"enumeration"`) required by UML 2.5.1 Table C.1.
+ * Already-current models pass through untouched, so this is safe to run on every
+ * load (see `normalizeModel`), covering v4 pass-through, v3/v2 conversions, and
+ * direct editor hydration in one place.
+ */
+export function normalizeClassStereotypes(model: UMLModel): UMLModel {
+  const V4_STEREOTYPE: Record<string, ClassStereotype> = {
+    Interface: ClassStereotype.Interface,
+    Enumeration: ClassStereotype.Enumeration,
+  }
+  for (const node of model.nodes) {
+    if (node.type !== "class") continue
+    const data = node.data as ClassNodeProps
+    const raw = data.stereotype as unknown as string | undefined
+    if (raw === "Abstract") {
+      data.isAbstract = true
+      delete (data as { stereotype?: unknown }).stereotype
+      if (typeof node.height === "number") node.height -= 10
+      if (node.measured && typeof node.measured.height === "number") {
+        node.measured.height -= 10
+      }
+    } else if (raw && raw in V4_STEREOTYPE) {
+      data.stereotype = V4_STEREOTYPE[raw]
+    }
+    // A keyword and the abstract modifier are mutually exclusive: an «interface»
+    // is inherently abstract, an «enumeration» can't be. Drop a stray modifier if
+    // both are set. No height change — abstractness never adds a header line.
+    if (data.stereotype && data.isAbstract) {
+      data.isAbstract = false
+    }
+  }
+  return model
+}
+
+/**
+ * Canonicalize host-defined tags on every taggable element. Mutates in place
+ * (the other normalization passes do too) and is idempotent.
+ */
+export function normalizeElementTags(model: UMLModel): UMLModel {
+  for (const { data } of taggableElements(model.nodes)) {
+    if ("tags" in data) applyTags(data, data.tags)
+  }
+  return model
+}
+
+/**
+ * Clear pre-feature straight-edge route caches before they can become authored
+ * waypoints. Versions 4.0 and 4.1 used `data.points` as full rendered geometry for
+ * these edge types; 4.2 changes the same field to interior-only user intent.
+ *
+ * This mutates in place like the other import normalizers and is idempotent.
+ */
+export function normalizeStraightEdgeWaypoints(model: UMLModel): UMLModel {
+  const match = /^4\.(\d+)\.(\d+)$/.exec(model.version)
+  if (!match) return model
+  const minor = Number(match[1])
+  if (minor < STRAIGHT_WAYPOINT_MODEL_MINOR) {
+    for (const edge of model.edges) {
+      if (!STRAIGHT_HOOK_EDGE_TYPES.has(edge.type ?? "")) continue
+      const data = edge.data as
+        | (Record<string, unknown> & { points?: unknown })
+        | null
+        | undefined
+      if (data && Array.isArray(data.points)) data.points = []
+    }
+    model.version = CURRENT_MODEL_VERSION
+  }
+  return model
+}
+
+/**
+ * Remove React Flow interaction state that older exports and captured fixtures
+ * could persist. Imported models should contain only durable diagram data, not
+ * the selection or drag state of the editor that produced the file.
+ */
+function stripRuntimeInteractionState(model: UMLModel): UMLModel {
+  let changed = false
+
+  const nodes = model.nodes.map((node) => {
+    if (
+      !("selected" in node) &&
+      !("dragging" in node) &&
+      !("resizing" in node)
+    ) {
+      return node
+    }
+
+    changed = true
+    const persistentNode = { ...node } as ApollonNode & {
+      selected?: unknown
+      dragging?: unknown
+      resizing?: unknown
+    }
+    delete persistentNode.selected
+    delete persistentNode.dragging
+    delete persistentNode.resizing
+    return persistentNode
+  })
+
+  const edges = model.edges.map((edge) => {
+    if (!("selected" in edge)) return edge
+
+    changed = true
+    const persistentEdge = { ...edge } as ApollonEdge & {
+      selected?: unknown
+    }
+    delete persistentEdge.selected
+    return persistentEdge
+  })
+
+  return changed ? { ...model, nodes, edges } : model
+}
+
+/**
+ * The single normalization pass every incoming model must pass through, whatever
+ * its origin. Keep it idempotent and version-agnostic so already-saved `4.0.0`
+ * files are repaired on load rather than gated behind a version check.
+ */
+export function normalizeModel(model: UMLModel): UMLModel {
+  return stripRuntimeInteractionState(
+    normalizeElementTags(
+      normalizeClassStereotypes(normalizeStraightEdgeWaypoints(model))
+    )
   )
 }
 
@@ -827,24 +1063,23 @@ export function isV4Format(data: any): data is UMLModel {
  * Universal import function that handles v2, v3 and v4 formats
  */
 export function importDiagram(data: any | V3UMLModel): UMLModel {
+  let model: UMLModel
+
   if (isV4Format(data)) {
-    return data
-  }
-
-  if (isV3Format(data)) {
-    return convertV3ToV4(data)
-  }
-
-  if (isV2Format(data)) {
-    return convertV2ToV4(data)
-  }
-
-  if (data.model) {
+    model = data
+  } else if (isV3Format(data)) {
+    model = convertV3ToV4(data)
+  } else if (isV2Format(data)) {
+    model = convertV2ToV4(data)
+  } else if (data.model) {
     //playground
     return importDiagram(data.model)
+  } else {
+    throw new Error(
+      "Unsupported diagram format. Only 2.x.x, 3.x.x and 4.x.x formats are supported."
+    )
   }
 
-  throw new Error(
-    "Unsupported diagram format. Only 2.x.x, 3.x.x and 4.x.x formats are supported."
-  )
+  // Strip stale runtime-only edge geometry (computedSegments) from imports.
+  return transformEdges(normalizeModel(model))
 }

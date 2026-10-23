@@ -1,60 +1,64 @@
-import { Box, FormControl, InputLabel, MenuItem, Select } from "@mui/material"
+import { Select } from "@/components/ui"
+import { NodeStyleEditor } from "@/components/styleEditor"
+import { useReactiveNode } from "@/hooks"
 import { useReactFlow } from "@xyflow/react"
 import { PopoverProps } from "../types"
-import { BPMNIntermediateEventType } from "@/types"
-import { TextField } from "@/components/ui"
+import { BPMNEventProps, BPMNIntermediateEventType } from "@/types"
+import { supportsMultilineName } from "@/utils/nodeUtils"
+import { useLabels } from "@/i18n/useLabels"
+import { PopoverLayout, PopoverSection } from "../PopoverLayout"
 
 export const BPMNIntermediateEventEditPopover: React.FC<PopoverProps> = ({
   elementId,
 }) => {
-  const { getNode, updateNodeData } = useReactFlow()
-  const node = getNode(elementId)
+  const t = useLabels()
+  const { updateNodeData } = useReactFlow()
+  const node = useReactiveNode(elementId)
   if (!node) return null
 
-  const data = node.data as {
-    name?: string
-    eventType?: BPMNIntermediateEventType
+  const data = node.data as BPMNEventProps
+
+  const INTERMEDIATE_TYPE_OPTIONS = [
+    { value: "default", label: t.bpmnDefault },
+    { value: "message-catch", label: t.bpmnMessageCatch },
+    { value: "message-throw", label: t.bpmnMessageThrow },
+    { value: "timer-catch", label: t.bpmnTimerCatch },
+    { value: "escalation-throw", label: t.bpmnEscalationThrow },
+    { value: "conditional-catch", label: t.bpmnConditionalCatch },
+    { value: "link-catch", label: t.bpmnLinkCatch },
+    { value: "link-throw", label: t.bpmnLinkThrow },
+    { value: "compensation-throw", label: t.bpmnCompensationThrow },
+    { value: "signal-catch", label: t.bpmnSignalCatch },
+    { value: "signal-throw", label: t.bpmnSignalThrow },
+  ]
+
+  const handleDataFieldUpdate = (key: string, value: string) => {
+    updateNodeData(elementId, { [key]: value })
   }
 
-  const handleNameChange = (value: string) =>
-    updateNodeData(elementId, { name: value })
-  const handleTypeChange = (value: BPMNIntermediateEventType) =>
-    updateNodeData(elementId, { eventType: value })
-
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-      <TextField
-        size="small"
-        label="Name"
-        value={data.name ?? ""}
-        onChange={(e) => handleNameChange(e.target.value)}
+    <PopoverLayout title={t.intermediateEvent}>
+      <NodeStyleEditor
+        handleDataFieldUpdate={(key, value) =>
+          handleDataFieldUpdate(key, value)
+        }
+        nodeData={data}
+        isMultilineName={supportsMultilineName(node.type)}
       />
-      <FormControl fullWidth size="small">
-        <InputLabel id="bpmn-intermediate-type-label">
-          Intermediate Type
-        </InputLabel>
+
+      <PopoverSection title={t.type} divider>
         <Select
-          labelId="bpmn-intermediate-type-label"
-          id="bpmn-intermediate-type-select"
+          label={t.intermediateType}
           value={data.eventType ?? "default"}
-          label="Intermediate Type"
-          onChange={(e) =>
-            handleTypeChange(e.target.value as BPMNIntermediateEventType)
+          options={INTERMEDIATE_TYPE_OPTIONS}
+          onChange={(value) =>
+            handleDataFieldUpdate(
+              "eventType",
+              value as BPMNIntermediateEventType
+            )
           }
-        >
-          <MenuItem value="default">Default</MenuItem>
-          <MenuItem value="message-catch">Message Catch</MenuItem>
-          <MenuItem value="message-throw">Message Throw</MenuItem>
-          <MenuItem value="timer-catch">Timer Catch</MenuItem>
-          <MenuItem value="escalation-throw">Escalation Throw</MenuItem>
-          <MenuItem value="conditional-catch">Conditional Catch</MenuItem>
-          <MenuItem value="link-catch">Link Catch</MenuItem>
-          <MenuItem value="link-throw">Link Throw</MenuItem>
-          <MenuItem value="compensation-throw">Compensation Throw</MenuItem>
-          <MenuItem value="signal-catch">Signal Catch</MenuItem>
-          <MenuItem value="signal-throw">Signal Throw</MenuItem>
-        </Select>
-      </FormControl>
-    </Box>
+        />
+      </PopoverSection>
+    </PopoverLayout>
   )
 }

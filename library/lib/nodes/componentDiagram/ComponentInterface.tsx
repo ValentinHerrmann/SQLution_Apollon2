@@ -1,11 +1,12 @@
 import { NodeProps, type Node } from "@xyflow/react"
-import { DefaultNodeWrapper, HandleId } from "../wrappers"
+import { usePopoverAnchor } from "@/hooks/usePopoverAnchor"
+import { DefaultNodeWrapper, FOUR_WAY_HANDLES_PRESET } from "../wrappers"
 import { DefaultNodeProps } from "@/types"
-import { useRef } from "react"
 import { PopoverManager } from "@/components/popovers/PopoverManager"
 import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
 import { ComponentInterfaceNodeSVG } from "@/components"
 import { NodeToolbar } from "@/components/toolbars/NodeToolbar"
+import { useInterfaceLabelSide } from "@/hooks/useInterfaceLabelSide"
 
 export function ComponentInterface({
   id,
@@ -13,8 +14,15 @@ export function ComponentInterface({
   height,
   data,
 }: NodeProps<Node<DefaultNodeProps>>) {
-  const svgWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [anchorEl, anchorRef] = usePopoverAnchor()
   const isDiagramModifiable = useDiagramModifiable()
+  const showAssessmentResults = !isDiagramModifiable
+  // Move the name off any side a connecting edge actually attaches to (read from the
+  // routed geometry, not the stored handle). A primitive-returning selector re-renders
+  // the node only when the chosen side flips.
+  const labelSide = useInterfaceLabelSide(id, {
+    badgeTopRight: showAssessmentResults,
+  })
 
   if (!width || !height) {
     return null
@@ -25,34 +33,22 @@ export function ComponentInterface({
       width={width}
       height={height}
       elementId={id}
-      hiddenHandles={[
-        HandleId.TopLeft,
-        HandleId.TopRight,
-        HandleId.RightTop,
-        HandleId.RightBottom,
-        HandleId.BottomRight,
-        HandleId.BottomLeft,
-        HandleId.LeftBottom,
-        HandleId.LeftTop,
-      ]}
+      hiddenHandles={FOUR_WAY_HANDLES_PRESET}
     >
       <NodeToolbar elementId={id} />
 
-      <div ref={svgWrapperRef}>
+      <div ref={anchorRef}>
         <ComponentInterfaceNodeSVG
           width={width}
           height={height}
           data={data}
           id={id}
-          showAssessmentResults={!isDiagramModifiable}
+          showAssessmentResults={showAssessmentResults}
+          labelSide={labelSide}
         />
       </div>
 
-      <PopoverManager
-        anchorEl={svgWrapperRef.current}
-        elementId={id}
-        type="default"
-      />
+      <PopoverManager anchorEl={anchorEl} elementId={id} type="default" />
     </DefaultNodeWrapper>
   )
 }

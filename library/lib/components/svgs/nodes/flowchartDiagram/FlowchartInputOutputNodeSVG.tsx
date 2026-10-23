@@ -1,5 +1,6 @@
-import { CustomText } from "@/components"
-import { LINE_WIDTH } from "@/constants"
+import { MultilineText } from "@/components"
+import { maxLinesForHeight } from "@/utils/svgTextLayout"
+import { LAYOUT } from "@/constants"
 import { useDiagramStore } from "@/store"
 import { useShallow } from "zustand/shallow"
 import AssessmentIcon from "../../AssessmentIcon"
@@ -16,14 +17,14 @@ export const FlowchartInputOutputNodeSVG: React.FC<Props> = ({
   height,
   data,
   svgAttributes,
-  transformScale,
+  SIDEBAR_PREVIEW_SCALE,
   showAssessmentResults = false,
 }) => {
   const { name } = data
   const assessments = useDiagramStore(useShallow((state) => state.assessments))
   const nodeScore = assessments[id]?.score
-  const scaledWidth = width * (transformScale ?? 1)
-  const scaledHeight = height * (transformScale ?? 1)
+  const scaledWidth = width * (SIDEBAR_PREVIEW_SCALE ?? 1)
+  const scaledHeight = height * (SIDEBAR_PREVIEW_SCALE ?? 1)
 
   const { fillColor, strokeColor, textColor } = getCustomColorsFromData(data)
 
@@ -37,26 +38,28 @@ export const FlowchartInputOutputNodeSVG: React.FC<Props> = ({
     >
       <g>
         {/* Parallelogram shape for input/output */}
-        <polygon
-          points={`20,0 ${width},0 ${width - 20},${height} 0,${height}`}
-          strokeWidth={LINE_WIDTH}
+        <path
+          d={`M20,0 L${width},0 L${width - 20},${height} L0,${height} Z`}
+          strokeWidth={LAYOUT.LINE_WIDTH}
           stroke={strokeColor}
           fill={fillColor}
         />
 
-        {/* Name Text */}
-        <CustomText
+        {/* Name Text — parallelogram slants inward by 20px on each side.
+            The 48-px horizontal reserve is an approximation: the true
+            inner width varies with y, and a tall multi-line block at
+            the top/bottom of the shape can still kiss the slopes. Good
+            enough for typical aspect ratios; revisit if reports come in. */}
+        <MultilineText
+          text={name}
           x={width / 2}
           y={height / 2}
-          textAnchor="middle"
+          maxWidth={width - 48}
+          fontSize={LAYOUT.NAME_FONT_SIZE}
           fontWeight="600"
-          dominantBaseline="central"
           fill={textColor}
-        >
-          <tspan x={width / 2} dy="0">
-            {name}
-          </tspan>
-        </CustomText>
+          maxLines={maxLinesForHeight(height - 16, LAYOUT.NAME_LINE_HEIGHT)}
+        />
       </g>
 
       {showAssessmentResults && (

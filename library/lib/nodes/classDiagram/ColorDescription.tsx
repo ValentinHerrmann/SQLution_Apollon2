@@ -1,12 +1,11 @@
-import { NodeProps, NodeResizer, type Node } from "@xyflow/react"
-import { DefaultNodeWrapper } from "../wrappers"
+import { NodeProps, type Node } from "@xyflow/react"
+import { usePopoverAnchor } from "@/hooks/usePopoverAnchor"
+import { DefaultNodeWrapper, NodeResizer } from "../wrappers"
 import { ColorDescriptionSVG } from "@/components"
 import { NodeToolbar } from "@/components/toolbars/NodeToolbar"
 import { DefaultNodeProps } from "@/types"
 import { PopoverManager } from "@/components/popovers/PopoverManager"
-import { useRef } from "react"
 import { useDiagramModifiable } from "@/hooks/useDiagramModifiable"
-import { useIsOnlyThisElementSelected } from "@/hooks/useIsOnlyThisElementSelected"
 
 export function ColorDescription({
   width,
@@ -14,8 +13,7 @@ export function ColorDescription({
   data,
   id,
 }: NodeProps<Node<DefaultNodeProps>>) {
-  const anchorEl = useRef<HTMLDivElement | null>(null)
-  const selected = useIsOnlyThisElementSelected(id)
+  const [anchorEl, anchorRef] = usePopoverAnchor()
   const isDiagramModifiable = useDiagramModifiable()
   if (!width || !height) {
     return null
@@ -29,19 +27,12 @@ export function ColorDescription({
       hiddenHandles={true}
     >
       <NodeToolbar elementId={id} />
-      <NodeResizer
-        minHeight={40}
-        isVisible={isDiagramModifiable && !!selected}
-      />
+      <NodeResizer minHeight={40} isVisible={isDiagramModifiable} />
 
-      <div ref={anchorEl}>
+      <div ref={anchorRef}>
         <ColorDescriptionSVG data={data} width={width} height={height} />
       </div>
-      <PopoverManager
-        elementId={id}
-        type="default"
-        anchorEl={anchorEl.current}
-      />
+      <PopoverManager elementId={id} type="default" anchorEl={anchorEl} />
     </DefaultNodeWrapper>
   )
 }

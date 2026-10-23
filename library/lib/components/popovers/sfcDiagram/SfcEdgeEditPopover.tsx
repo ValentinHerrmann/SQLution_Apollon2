@@ -1,6 +1,9 @@
-import { Box, FormControlLabel, Checkbox } from "@mui/material"
-import { EdgeStyleEditor, TextField } from "@/components/ui"
+import { useReactiveEdge } from "@/hooks"
+import { Checkbox, TextField } from "@/components/ui"
+import { EdgeStyleEditor } from "@/components/styleEditor"
 import { PopoverProps } from "../types"
+import { useLabels } from "@/i18n/useLabels"
+import { PopoverLayout, PopoverSection } from "../PopoverLayout"
 import { useReactFlow } from "@xyflow/react"
 import { useState, useCallback, useEffect } from "react"
 import { CustomEdgeProps } from "@/edges"
@@ -33,8 +36,9 @@ function serializeSfcEdgeLabel(data: SfcEdgeData): string {
 }
 
 export const SfcEdgeEditPopover: React.FC<PopoverProps> = ({ elementId }) => {
-  const { getEdge, updateEdgeData } = useReactFlow()
-  const edge = getEdge(elementId)
+  const t = useLabels()
+  const { updateEdgeData } = useReactFlow()
+  const edge = useReactiveEdge(elementId)
 
   const [edgeData, setEdgeData] = useState<SfcEdgeData>(() =>
     parseSfcEdgeLabel(edge?.data?.label as string | undefined)
@@ -88,49 +92,39 @@ export const SfcEdgeEditPopover: React.FC<PopoverProps> = ({ elementId }) => {
   const edgeDataCustom = edge.data as CustomEdgeProps
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <PopoverLayout title={t.edge}>
       <EdgeStyleEditor
-        label="Edit Transition"
+        label={t.style}
         edgeData={edgeDataCustom}
         handleDataFieldUpdate={(key, value) =>
           updateEdgeData(elementId, { [key]: value })
         }
       />
 
-      <TextField
-        label="Condition"
-        value={edgeData.displayName}
-        onChange={(e) => handleDisplayNameChange(e.target.value)}
-        placeholder="Enter transition condition"
-        size="small"
-        fullWidth
-      />
+      <PopoverSection title={t.condition} divider>
+        <TextField
+          value={edgeData.displayName}
+          onChange={(e) => handleDisplayNameChange(e.target.value)}
+          placeholder={t.condition}
+          fullWidth
+        />
 
-      {edgeData.displayName && (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={edgeData.showBar}
-                onChange={(e) => handleShowBarChange(e.target.checked)}
-                size="small"
-              />
-            }
-            label="Show crossbar"
-          />
+        {edgeData.displayName && (
+          <>
+            <Checkbox
+              checked={edgeData.showBar}
+              onCheckedChange={handleShowBarChange}
+              label={t.showCrossbar}
+            />
 
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={edgeData.isNegated}
-                onChange={(e) => handleIsNegatedChange(e.target.checked)}
-                size="small"
-              />
-            }
-            label="Negated condition (overline)"
-          />
-        </Box>
-      )}
-    </Box>
+            <Checkbox
+              checked={edgeData.isNegated}
+              onCheckedChange={handleIsNegatedChange}
+              label={t.negatedCondition}
+            />
+          </>
+        )}
+      </PopoverSection>
+    </PopoverLayout>
   )
 }

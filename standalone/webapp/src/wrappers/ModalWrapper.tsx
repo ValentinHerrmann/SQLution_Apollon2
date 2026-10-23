@@ -1,18 +1,27 @@
 import React from "react"
 import {
   NewDiagramModal,
-  NewDiagramFromTemplateModal,
-  LoadDiagramModal,
   ShareModal,
+  ShareDashboardModal,
+  CollaborateNameModal,
   AboutModal,
   HowToUseModal,
+  PPTXExportModal,
 } from "@/components/modals"
+import {
+  ConfirmRestoreModal,
+  DeleteVersionModal,
+} from "@/components/versioning"
+import { versioningStrings as v } from "@/components/versioning/strings"
 import { useModalContext } from "@/contexts"
+import {
+  ModalProgressProvider,
+  useModalProgress,
+} from "@/contexts/ModalProgressContext"
 import { ModalName, ModalProps } from "@/types"
-import { Modal, Paper, Box, Button, Divider } from "@mui/material"
-import { Typography } from "@/components/Typography"
-import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined"
 import { log } from "@/logger"
+import { isHomeDialogVariant } from "@/components/modals/HomeDialog"
+import { ModalFrame, type ModalVariant } from "./ModalFrame"
 
 interface ModalWrapperProps {
   name: ModalName
@@ -20,93 +29,111 @@ interface ModalWrapperProps {
   closeModal: () => void
 }
 
-// Define a mapping from modal names to modal components
-const MODAL_COMPONENTS: Record<ModalName, React.ComponentType<unknown>> = {
+// `satisfies Record<ModalName, ...>` keeps the registry exhaustive (no missing
+// or stray names) while each entry keeps its own real props type — e.g.
+// `ShareDashboardModal` stays `{ modelId?: string }` rather than widening to the
+// loose props bag. The one unavoidable erasure is the dynamic spread in the
+// renderer below.
+const MODAL_COMPONENTS = {
   NEW_DIAGRAM: NewDiagramModal,
-  NEW_DIAGRAM_FROM_TEMPLATE: NewDiagramFromTemplateModal,
   SHARE: ShareModal,
-  LOAD_DIAGRAM: LoadDiagramModal,
-  HowToUseModal: HowToUseModal,
-  AboutModal: AboutModal,
-  // Add other modals here
-}
+  SHARE_DASHBOARD: ShareDashboardModal,
+  COLLABORATE_NAME: CollaborateNameModal,
+  EXPORT_PPTX: PPTXExportModal,
+  HowToUseModal,
+  AboutModal,
+  DELETE_VERSION: DeleteVersionModal,
+  CONFIRM_RESTORE: ConfirmRestoreModal,
+} satisfies Record<ModalName, React.ComponentType<never>>
 
 const MODAL_TITLES: Record<ModalName, string> = {
-  NEW_DIAGRAM: "Create new Diagram",
-  NEW_DIAGRAM_FROM_TEMPLATE: "Create new Diagram from Template",
+  NEW_DIAGRAM: "New Diagram",
   SHARE: "Share",
-  LOAD_DIAGRAM: "Load Diagram",
+  SHARE_DASHBOARD: "Share your diagram",
+  COLLABORATE_NAME: "Join Collaboration",
+  EXPORT_PPTX: "Export as PPTX",
   HowToUseModal: "How to use this editor?",
   AboutModal: "Information about Apollon",
-  // Add other modals here
+  DELETE_VERSION: "Delete version",
+  CONFIRM_RESTORE: v.confirmRestoreTitle,
 }
 
-const style = {
-  position: "absolute",
-  top: "50%",
-  left: "50%",
-  transform: "translate(-50%, -50%)",
-  display: "flex",
-  flexDirection: "column",
-  minWidth: "20vw", // or use a specific pixel value like "600px"
-  maxWidth: "90vw", // to limit on very large screens
-  width: "50vw", // ensures it's at least half screen
-  gap: 1,
-  bgcolor: "var(--apollon2-background)",
+const ModalProgressBar = () => {
+  const { isLoading } = useModalProgress()
+  if (!isLoading) return null
+
+  return (
+    <div
+      role="progressbar"
+      aria-label="Loading"
+      style={{ transition: "opacity 200ms ease" }}
+    >
+      <div className="share-modal-progress" />
+    </div>
+  )
 }
 
 export const ModalWrapper: React.FC<ModalWrapperProps> = ({ name, props }) => {
-  const SpecificModal = MODAL_COMPONENTS[name]
+  // The single erasure noted above: the runtime `name` and the loosely-typed
+  // `props` bag meet here, so per-modal prop types can't be statically tied.
+  const SpecificModal = MODAL_COMPONENTS[
+    name
+  ] as unknown as React.ComponentType<ModalProps & { onClose?: () => void }>
   const { closeModal } = useModalContext()
+  const isContentOverflow = Boolean(
+    props && typeof props === "object" && props.contentOverflow
+  )
+  const isHomeDialog = isContentOverflow || isHomeDialogVariant(props)
+  const isConfirmModal =
+    name === "DELETE_VERSION" ||
+    name === "CONFIRM_RESTORE" ||
+    name === "COLLABORATE_NAME"
+  const variant: ModalVariant =
+    name === "SHARE"
+      ? "editor-share"
+      : isHomeDialog
+        ? name === "NEW_DIAGRAM"
+          ? "home-wide"
+          : "home-compact"
+        : isConfirmModal
+          ? "confirm"
+          : "plain"
 
   if (!SpecificModal) {
     log.error(`No modal found for name: ${name}`)
     return null
   }
 
+  const handleClose = () => {
+    const onClose =
+      props && typeof props === "object" && "onClose" in props
+        ? props.onClose
+        : undefined
+
+    if (typeof onClose === "function") {
+      onClose()
+    }
+
+    closeModal()
+  }
+
   return (
-    <Modal
-      open
-      onClose={closeModal}
-      aria-labelledby="modal-modal-title"
-      aria-describedby="modal-modal-description"
-    >
-      <Paper sx={style}>
-        {/* Header */}
-        <Box
-          sx={{
-            position: "relative",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            p: 2,
-          }}
-        >
-          <Typography variant="h5" id="modal-modal-title">
-            {MODAL_TITLES[name]}
-          </Typography>
-
-          <Button
-            sx={{ position: "absolute", top: 16, right: 8 }}
-            onClick={closeModal}
-          >
-            <CloseOutlinedIcon sx={{ color: "grey" }} />
-          </Button>
-        </Box>
-        <Divider sx={{ bgcolor: "var(--apollon2-background-variant)" }} />
-
-        {/* Scrollable Content */}
-        <Box
-          sx={{
-            p: 2,
-            overflowY: "auto", // Enable vertical scrolling
-            maxHeight: "calc(90vh - 60px)", // Adjust for header and padding
-            flexGrow: 1, // Allow content to take remaining space
-          }}
-        >
-          {SpecificModal && <SpecificModal {...props} />}
-        </Box>
-      </Paper>
-    </Modal>
+    <ModalProgressProvider>
+      <ModalFrame
+        title={MODAL_TITLES[name]}
+        variant={variant}
+        contentOverflow={isContentOverflow}
+        onOpenChange={(open) => {
+          if (!open) handleClose()
+        }}
+        beforeBody={<ModalProgressBar />}
+      >
+        {/* The presentational modal bodies report dismissal through an
+            `onClose` callback instead of reaching into the modal context. We
+            wire it to `closeModal` *after* spreading the caller props so a
+            caller-supplied `onClose` never shadows the body's close action. */}
+        <SpecificModal {...props} onClose={closeModal} />
+      </ModalFrame>
+    </ModalProgressProvider>
   )
 }

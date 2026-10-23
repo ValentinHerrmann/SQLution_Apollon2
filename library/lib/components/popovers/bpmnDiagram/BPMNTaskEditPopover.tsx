@@ -1,71 +1,74 @@
-import { Box, FormControl, InputLabel, MenuItem, Select } from "@mui/material"
-import { NodeStyleEditor } from "@/components/ui"
+import { Select } from "@/components/ui"
+import { NodeStyleEditor } from "@/components/styleEditor"
+import { useReactiveNode } from "@/hooks"
 import { useReactFlow } from "@xyflow/react"
 import { PopoverProps } from "../types"
 import { BPMNMarkerType, BPMNTaskProps, BPMNTaskType } from "@/types"
+import { supportsMultilineName } from "@/utils/nodeUtils"
+import { useLabels } from "@/i18n/useLabels"
+import { PopoverLayout, PopoverSection } from "../PopoverLayout"
 
 export const BPMNTaskEditPopover: React.FC<PopoverProps> = ({ elementId }) => {
-  const { getNode, updateNodeData } = useReactFlow()
-  const node = getNode(elementId)
+  const t = useLabels()
+  const { updateNodeData } = useReactFlow()
+  const node = useReactiveNode(elementId)
   if (!node) return null
 
   const data = node.data as BPMNTaskProps
+
+  const TASK_TYPE_OPTIONS = [
+    { value: "default", label: t.bpmnDefault },
+    { value: "user", label: t.bpmnUser },
+    { value: "send", label: t.bpmnSend },
+    { value: "receive", label: t.bpmnReceive },
+    { value: "manual", label: t.bpmnManual },
+    { value: "business-rule", label: t.bpmnBusinessRule },
+    { value: "script", label: t.bpmnScript },
+  ]
+
+  const MARKER_OPTIONS = [
+    { value: "none", label: t.bpmnMarkerNone },
+    { value: "parallel multi instance", label: t.bpmnParallelMultiInstance },
+    {
+      value: "sequential multi instance",
+      label: t.bpmnSequentialMultiInstance,
+    },
+    { value: "loop", label: t.bpmnLoop },
+  ]
 
   const handleDataFieldUpdate = (key: string, value: string) => {
     updateNodeData(elementId, { [key]: value })
   }
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+    <PopoverLayout title={t.task}>
       <NodeStyleEditor
         handleDataFieldUpdate={(key, value) =>
           handleDataFieldUpdate(key, value)
         }
         nodeData={data}
+        isMultilineName={supportsMultilineName(node.type)}
       />
 
-      <FormControl fullWidth size="small">
-        <InputLabel id="bpmn-task-type-label">Task Type</InputLabel>
+      <PopoverSection divider>
         <Select
-          labelId="bpmn-task-type-label"
-          id="bpmn-task-type-select"
+          label={t.taskType}
           value={data.taskType ?? "default"}
-          label="Task Type"
-          onChange={(e) =>
-            handleDataFieldUpdate("taskType", e.target.value as BPMNTaskType)
+          options={TASK_TYPE_OPTIONS}
+          onChange={(value) =>
+            handleDataFieldUpdate("taskType", value as BPMNTaskType)
           }
-        >
-          <MenuItem value="default">Default</MenuItem>
-          <MenuItem value="user">User</MenuItem>
-          <MenuItem value="send">Send</MenuItem>
-          <MenuItem value="receive">Receive</MenuItem>
-          <MenuItem value="manual">Manual</MenuItem>
-          <MenuItem value="business-rule">Business Rule</MenuItem>
-          <MenuItem value="script">Script</MenuItem>
-        </Select>
-      </FormControl>
+        />
 
-      <FormControl fullWidth size="small">
-        <InputLabel id="bpmn-task-marker-label">Marker</InputLabel>
         <Select
-          labelId="bpmn-task-marker-label"
-          id="bpmn-task-marker-select"
+          label={t.marker}
           value={data.marker ?? "none"}
-          label="Marker"
-          onChange={(e) =>
-            handleDataFieldUpdate("marker", e.target.value as BPMNMarkerType)
+          options={MARKER_OPTIONS}
+          onChange={(value) =>
+            handleDataFieldUpdate("marker", value as BPMNMarkerType)
           }
-        >
-          <MenuItem value="none">None</MenuItem>
-          <MenuItem value="parallel multi instance">
-            Parallel multi instance
-          </MenuItem>
-          <MenuItem value="sequential multi instance">
-            Sequential multi instance
-          </MenuItem>
-          <MenuItem value="loop">Loop</MenuItem>
-        </Select>
-      </FormControl>
-    </Box>
+        />
+      </PopoverSection>
+    </PopoverLayout>
   )
 }

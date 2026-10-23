@@ -1,12 +1,11 @@
-/* eslint-disable */
-import { IPoint } from "../edges/Connection"
+/* eslint-disable @typescript-eslint/no-explicit-any -- mirrors the legacy V3 JSON model shape (pre-typed-schema); intentionally loose at this boundary. */
+import type { IPoint } from "../edges/Connection"
 
 export type V3Selection = {
   elements: { [id: string]: boolean }
   relationships: { [id: string]: boolean }
 }
 
-// Add specific V3 element types based on the old typings
 export type V3UMLClassifier = {
   attributes: string[] // Array of attribute element IDs
   methods: string[] // Array of method element IDs
@@ -96,7 +95,7 @@ export type V3UMLReachabilityGraphMarking = {
 
 export interface V3UMLModel {
   version: string
-  type: string // Changed from UMLDiagramType to string to allow any type during conversion
+  type: string // Loose `string` (not UMLDiagramType) to allow any type during conversion
   size: {
     width: number
     height: number
